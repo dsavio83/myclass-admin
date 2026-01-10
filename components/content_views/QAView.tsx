@@ -92,13 +92,26 @@ const QAEditorModal: React.FC<QAEditorModalProps> = ({ isOpen, onClose, onSave, 
     // Initialize content
     useEffect(() => {
         if (!isOpen) return;
-        setQuestionHtml(contentToEdit ? contentToEdit.title : '');
-        setAnswerHtml(contentToEdit ? contentToEdit.body : '');
-        const meta = contentToEdit?.metadata as QAMetadata | undefined;
-        setMarks(meta?.marks || 2);
-        setQType(meta?.questionType || 'Basic');
-        setCogProcess(meta?.cognitiveProcess || 'CP1');
-        setIsPublished(contentToEdit ? !!contentToEdit.isPublished : false);
+
+        // Reset all state variables when opening modal
+        if (!contentToEdit) {
+            // "Add New" mode - reset all fields to defaults
+            setQuestionHtml('');
+            setAnswerHtml('');
+            setMarks(2);
+            setQType('Basic');
+            setCogProcess('CP1');
+            setIsPublished(false);
+        } else {
+            // "Edit" mode - load existing content
+            setQuestionHtml(contentToEdit.title);
+            setAnswerHtml(contentToEdit.body);
+            const meta = contentToEdit.metadata as QAMetadata | undefined;
+            setMarks(meta?.marks || 2);
+            setQType(meta?.questionType || 'Basic');
+            setCogProcess(meta?.cognitiveProcess || 'CP1');
+            setIsPublished(!!contentToEdit.isPublished);
+        }
         setActiveTab('question');
     }, [isOpen, contentToEdit]);
 
@@ -158,9 +171,10 @@ const QAEditorModal: React.FC<QAEditorModalProps> = ({ isOpen, onClose, onSave, 
                                             value={marks}
                                             onChange={(e) => setMarks(Number(e.target.value))}
                                             className="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 transition-all py-2"
-                                        >
+                                        >   <option value={1}>1 Marks</option>
                                             <option value={2}>2 Marks</option>
                                             <option value={3}>3 Marks</option>
+                                            <option value={4}>4 Marks</option>
                                             <option value={5}>5 Marks</option>
                                             <option value={6}>6 Marks</option>
                                         </select>
@@ -755,12 +769,14 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
                 </div>
             </div>
 
-            <QAEditorModal
-                isOpen={modalState.isOpen}
-                onClose={() => setModalState({ isOpen: false, content: null })}
-                onSave={handleSave}
-                contentToEdit={modalState.content}
-            />
+            {modalState.isOpen && (
+                <QAEditorModal
+                    isOpen={modalState.isOpen}
+                    onClose={() => setModalState({ isOpen: false, content: null })}
+                    onSave={handleSave}
+                    contentToEdit={modalState.content}
+                />
+            )}
             <ConfirmModal
                 isOpen={confirmModalState.isOpen}
                 onClose={() => setConfirmModalState({ isOpen: false, onConfirm: null })}

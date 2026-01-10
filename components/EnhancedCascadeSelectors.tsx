@@ -27,7 +27,7 @@ interface EnhancedCascadeSelectorsProps {
  * Enhanced CascadeSelectors that integrates with temporary selections
  */
 export const EnhancedCascadeSelectors: React.FC<EnhancedCascadeSelectorsProps> = ({
-  useTemporarySelections = true,
+  useTemporarySelections: enableTemporarySelections = true,
   showSelectionManager = true,
   onSyncToSession = false,
   className = '',
@@ -45,20 +45,20 @@ export const EnhancedCascadeSelectors: React.FC<EnhancedCascadeSelectorsProps> =
   onModalToggle
 }) => {
   const { updateAdminState, updateTeacherState, session } = useSession();
-  
+
   // Always call the hook, but use it conditionally
   const tempSelections = useTemporarySelections();
-  
+
   // Determine which selections to use based on the prop
-  const classId = useTemporarySelections ? tempSelections.selections.classId : externalClassId;
-  const subjectId = useTemporarySelections ? tempSelections.selections.subjectId : externalSubjectId;
-  const unitId = useTemporarySelections ? tempSelections.selections.unitId : externalUnitId;
-  const subUnitId = useTemporarySelections ? tempSelections.selections.subUnitId : externalSubUnitId;
-  const lessonId = useTemporarySelections ? tempSelections.selections.lessonId : externalLessonId;
+  const classId = enableTemporarySelections ? tempSelections.selections.classId : externalClassId;
+  const subjectId = enableTemporarySelections ? tempSelections.selections.subjectId : externalSubjectId;
+  const unitId = enableTemporarySelections ? tempSelections.selections.unitId : externalUnitId;
+  const subUnitId = enableTemporarySelections ? tempSelections.selections.subUnitId : externalSubUnitId;
+  const lessonId = enableTemporarySelections ? tempSelections.selections.lessonId : externalLessonId;
 
   // Create change handlers
   const handleClassChange = (id: string | null) => {
-    if (useTemporarySelections) {
+    if (enableTemporarySelections) {
       tempSelections.updateSelection('classId', id);
       // Clear dependent selections
       if (id) {
@@ -72,7 +72,7 @@ export const EnhancedCascadeSelectors: React.FC<EnhancedCascadeSelectorsProps> =
     } else {
       externalOnClassChange?.(id);
     }
-    
+
     // Sync to session if enabled
     if (onSyncToSession) {
       updateAdminState({ classId: id });
@@ -81,7 +81,7 @@ export const EnhancedCascadeSelectors: React.FC<EnhancedCascadeSelectorsProps> =
   };
 
   const handleSubjectChange = (id: string | null) => {
-    if (useTemporarySelections) {
+    if (enableTemporarySelections) {
       tempSelections.updateSelection('subjectId', id);
       // Clear dependent selections
       if (id) {
@@ -94,7 +94,7 @@ export const EnhancedCascadeSelectors: React.FC<EnhancedCascadeSelectorsProps> =
     } else {
       externalOnSubjectChange?.(id);
     }
-    
+
     // Sync to session if enabled
     if (onSyncToSession) {
       updateAdminState({ subjectId: id });
@@ -103,7 +103,7 @@ export const EnhancedCascadeSelectors: React.FC<EnhancedCascadeSelectorsProps> =
   };
 
   const handleUnitChange = (id: string | null) => {
-    if (useTemporarySelections) {
+    if (enableTemporarySelections) {
       tempSelections.updateSelection('unitId', id);
       // Clear dependent selections
       if (id) {
@@ -115,7 +115,7 @@ export const EnhancedCascadeSelectors: React.FC<EnhancedCascadeSelectorsProps> =
     } else {
       externalOnUnitChange?.(id);
     }
-    
+
     // Sync to session if enabled
     if (onSyncToSession) {
       updateAdminState({ unitId: id });
@@ -124,7 +124,7 @@ export const EnhancedCascadeSelectors: React.FC<EnhancedCascadeSelectorsProps> =
   };
 
   const handleSubUnitChange = (id: string | null) => {
-    if (useTemporarySelections) {
+    if (enableTemporarySelections) {
       tempSelections.updateSelection('subUnitId', id);
       // Clear dependent selections
       if (id) {
@@ -133,7 +133,7 @@ export const EnhancedCascadeSelectors: React.FC<EnhancedCascadeSelectorsProps> =
     } else {
       externalOnSubUnitChange?.(id);
     }
-    
+
     // Sync to session if enabled
     if (onSyncToSession) {
       updateAdminState({ subUnitId: id });
@@ -142,12 +142,12 @@ export const EnhancedCascadeSelectors: React.FC<EnhancedCascadeSelectorsProps> =
   };
 
   const handleLessonChange = (id: string | null) => {
-    if (useTemporarySelections) {
+    if (enableTemporarySelections) {
       tempSelections.updateSelection('lessonId', id);
     } else {
       externalOnLessonChange?.(id);
     }
-    
+
     // Sync to session if enabled
     if (onSyncToSession) {
       updateAdminState({ lessonId: id });
@@ -172,7 +172,7 @@ export const EnhancedCascadeSelectors: React.FC<EnhancedCascadeSelectorsProps> =
           className="mb-4"
         />
       )}
-      
+
       {/* Main cascade selectors */}
       <CascadeSelectors
         classId={classId}
