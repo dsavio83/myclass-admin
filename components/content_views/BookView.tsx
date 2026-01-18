@@ -11,6 +11,7 @@ import { ConfirmModal } from '../ConfirmModal';
 import { PdfViewer } from './PdfViewer';
 import { useToast } from '../../context/ToastContext';
 import { formatCount } from '../../utils/formatUtils';
+import { useContentUpdate } from '../../context/ContentUpdateContext';
 
 interface BookViewProps {
     lessonId: string;
@@ -484,6 +485,7 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
 
 export const BookView: React.FC<BookViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
+    const { triggerContentUpdate } = useContentUpdate();
 
     const { data: groupedContent, isLoading } = useApi(
         () => api.getContentsByLessonId(lessonId, ['book'], (user.role !== 'admin' && !user.canEdit)),
@@ -509,6 +511,7 @@ export const BookView: React.FC<BookViewProps> = ({ lessonId, user }) => {
         const confirmAction = async () => {
             await api.deleteContent(contentId);
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             showToast('Book deleted successfully.', 'success');
             setConfirmModalState({ isOpen: false, onConfirm: null });
         };
@@ -521,6 +524,7 @@ export const BookView: React.FC<BookViewProps> = ({ lessonId, user }) => {
             const newStatus = !bookContent.isPublished;
             await api.updateContent(bookContent._id, { isPublished: newStatus });
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             showToast(`Book ${newStatus ? 'published' : 'unpublished'} successfully`, 'success');
         } catch (error) {
             console.error('Failed to toggle publish status:', error);
@@ -566,7 +570,10 @@ export const BookView: React.FC<BookViewProps> = ({ lessonId, user }) => {
 
                     {!isLoading && !bookContent && (
                         canEdit ? (
-                            <UploadForm lessonId={lessonId} onUpload={() => setVersion(v => v + 1)} onExpand={setFullscreenPdfUrl} />
+                            <UploadForm lessonId={lessonId} onUpload={() => {
+                                setVersion(v => v + 1);
+                                triggerContentUpdate();
+                            }} onExpand={setFullscreenPdfUrl} />
                         ) : (
                             <div className="text-center py-20 bg-white dark:bg-gray-800/50 rounded-lg">
                                 <BookIcon className="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600" />

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useContentUpdate } from '../../context/ContentUpdateContext';
 import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
@@ -699,6 +700,7 @@ const AddVideoForm: React.FC<{ lessonId: string; onAdd: () => void; onCancel: ()
 
 export const VideoView: React.FC<VideoViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
+    const { triggerContentUpdate } = useContentUpdate();
     const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['video'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user]);
     const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; onConfirm: (() => void) | null; }>({ isOpen: false, onConfirm: null, });
     const [showAddForm, setShowAddForm] = useState(false);
@@ -720,6 +722,7 @@ export const VideoView: React.FC<VideoViewProps> = ({ lessonId, user }) => {
             try {
                 await api.deleteContent(contentId);
                 setVersion((v) => v + 1);
+                triggerContentUpdate(); // Update sidebar counts
                 showToast('Video deleted successfully', 'success');
             } catch (e) {
                 showToast('Failed to delete video', 'error');
@@ -734,6 +737,7 @@ export const VideoView: React.FC<VideoViewProps> = ({ lessonId, user }) => {
             const newStatus = !item.isPublished;
             await api.updateContent(item._id, { isPublished: newStatus });
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             showToast(`Video ${newStatus ? 'published' : 'unpublished'} successfully`, 'success');
         } catch (error) {
             console.error('Failed to toggle publish status:', error);
@@ -743,6 +747,7 @@ export const VideoView: React.FC<VideoViewProps> = ({ lessonId, user }) => {
 
     const handleAddSuccess = () => {
         setVersion(v => v + 1);
+        triggerContentUpdate(); // Update sidebar counts
         setShowAddForm(false);
     };
 

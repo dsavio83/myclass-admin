@@ -288,8 +288,11 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onCancel: (
     );
 };
 
+import { useContentUpdate } from '../../context/ContentUpdateContext';
+
 export const WorksheetView: React.FC<WorksheetViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
+    const { triggerContentUpdate } = useContentUpdate();
     const [showUploadForm, setShowUploadForm] = useState(false);
     const { data: grouped, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['worksheet'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user]);
     const worksheets = grouped?.[0]?.docs || [];
@@ -321,6 +324,7 @@ export const WorksheetView: React.FC<WorksheetViewProps> = ({ lessonId, user }) 
             onConfirm: async () => {
                 await api.deleteContent(id);
                 setVersion(v => v + 1);
+                triggerContentUpdate(); // Update sidebar counts
                 showToast('Deleted', 'success');
                 setConfirmModal({ isOpen: false, onConfirm: null });
             }
@@ -332,6 +336,7 @@ export const WorksheetView: React.FC<WorksheetViewProps> = ({ lessonId, user }) 
             const newStatus = !item.isPublished;
             await api.updateContent(item._id, { isPublished: newStatus });
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             showToast(`Worksheet ${newStatus ? 'published' : 'unpublished'} successfully`, 'success');
         } catch (error) {
             console.error('Failed to toggle publish status:', error);
@@ -453,7 +458,11 @@ export const WorksheetView: React.FC<WorksheetViewProps> = ({ lessonId, user }) 
             </div>
 
             <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar">
-                {showUploadForm && <UploadForm lessonId={lessonId} onUpload={() => { setVersion(v => v + 1); setShowUploadForm(false); }} onCancel={() => setShowUploadForm(false)} />}
+                {showUploadForm && <UploadForm lessonId={lessonId} onUpload={() => {
+                    setVersion(v => v + 1);
+                    triggerContentUpdate();
+                    setShowUploadForm(false);
+                }} onCancel={() => setShowUploadForm(false)} />}
 
                 {isLoading && <div className="text-center py-12 text-gray-500">Loading worksheets...</div>}
                 {!isLoading && worksheets.length === 0 && !showUploadForm && (

@@ -3,18 +3,22 @@ import { Content, User, ResourceType } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
 import { FlashcardIcon } from '../icons/ResourceTypeIcons';
-import { PlusIcon, EditIcon, TrashIcon, ImportIcon, ChevronRightIcon, ChevronLeftIcon, EyeIcon } from '../icons/AdminIcons';
+import { PlusIcon, EditIcon, TrashIcon, ImportIcon, ChevronRightIcon, ChevronLeftIcon, EyeIcon, CollectionIcon } from '../icons/AdminIcons';
 import { PublishToggle } from '../common/PublishToggle';
 import { UnpublishedContentMessage } from '../common/UnpublishedContentMessage';
 import { ConfirmModal } from '../ConfirmModal';
 import { ImportFlashcardsModal } from './ImportFlashcardsModal';
+import { ManageFlashcardsModal } from './ManageFlashcardsModal';
 import { Fireworks } from './Fireworks';
 import { useToast } from '../../context/ToastContext';
+import { useContentUpdate } from '../../context/ContentUpdateContext';
 import { processContentForHTML } from '../../utils/htmlUtils';
 import { formatCount } from '../../utils/formatUtils';
 import { ContentStatusBanner } from '../common/ContentStatusBanner';
+import Quill from 'quill';
+import 'quill/dist/quill.snow.css';
 
-declare const Quill: any;
+
 
 // Fixed themes with proper contrast - Black front with white text, white back with black text
 const getFrontTheme = () => {
@@ -52,6 +56,12 @@ const FlashcardEditorModal: React.FC<FlashcardEditorModalProps> = ({ isOpen, onC
 
     const editorContainerRef = useRef<HTMLDivElement>(null);
     const quillRef = useRef<any>(null);
+    const activeTabRef = useRef(activeTab);
+
+    // Keep activeTabRef in sync
+    useEffect(() => {
+        activeTabRef.current = activeTab;
+    }, [activeTab]);
 
     // Initialize Quill editor when modal opens
     useEffect(() => {
@@ -71,10 +81,9 @@ const FlashcardEditorModal: React.FC<FlashcardEditorModalProps> = ({ isOpen, onC
                 placeholder: 'Enter content...',
             });
 
-            // Add change listener to sync with state
             quill.on('text-change', () => {
                 const currentContent = quill.root.innerHTML;
-                if (activeTab === 'front') {
+                if (activeTabRef.current === 'front') {
                     setFrontHtml(currentContent);
                 } else {
                     setBackHtml(currentContent);
@@ -326,6 +335,7 @@ const ThankYouScreen: React.FC<{ onRetry: () => void }> = ({ onRetry }) => (
 // --- Main View Component ---
 export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
+    const { triggerContentUpdate } = useContentUpdate();
 
     // Debug logging to track lessonId changes
     useEffect(() => {
@@ -374,6 +384,7 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
     const [editorModalState, setEditorModalState] = useState<{ isOpen: boolean; content: Content | null }>({ isOpen: false, content: null });
     const [confirmModalState, setConfirmModalState] = useState<{ isOpen: boolean; onConfirm: (() => void) | null }>({ isOpen: false, onConfirm: null });
     const [importModalOpen, setImportModalOpen] = useState(false);
+    const [manageModalOpen, setManageModalOpen] = useState(false);
     const { showToast } = useToast();
 
     const flashcards = useMemo(() => groupedContent?.[0]?.docs || [], [groupedContent]);
@@ -470,6 +481,7 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
 
             // Refresh the content list
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
 
             // Reset editor state
             setEditorModalState({ isOpen: false, content: null });
@@ -486,6 +498,7 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
             try {
                 await api.deleteContent(contentId);
                 setVersion(v => v + 1);
+                triggerContentUpdate(); // Update sidebar counts
                 showToast('Card deleted.', 'error'); // Red toast for delete
             } catch (e) {
                 showToast('Failed to delete card.', 'error');
@@ -501,6 +514,7 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
             const newStatus = !currentCard.isPublished;
             await api.updateContent(currentCard._id, { isPublished: newStatus });
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             showToast(`Card ${newStatus ? 'published' : 'unpublished'} successfully`, 'success');
         } catch (error) {
             console.error('Failed to toggle publish status:', error);
@@ -518,11 +532,25 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
             }));
             await api.addMultipleContent(newContents);
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             showToast(`${cards.length} cards imported successfully!`, 'success');
         } catch (e) {
             showToast('Failed to import cards.', 'error');
         }
         setImportModalOpen(false);
+    };
+
+    const handleBulkDelete = async (ids: string[]) => {
+        try {
+            const result = await api.deleteMultipleContent(ids);
+            showToast(result.message, 'success');
+            setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
+        } catch (e) {
+            console.error("Bulk delete failed", e);
+            showToast('Failed to delete selected cards', 'error');
+            throw e;
+        }
     };
 
     const currentCard = flashcards[currentCardIndex];
@@ -559,6 +587,10 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
                                     <ImportIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                                     <span className="hidden sm:inline">Import</span>
                                 </button>
+                                <button onClick={() => setManageModalOpen(true)} className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 shadow-sm transition-colors" title="Manage Cards">
+                                    <CollectionIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                                    <span className="hidden sm:inline">Manage</span>
+                                </button>
                             </div>
                         )}
                     </div>
@@ -569,6 +601,7 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
                 </div>
                 <FlashcardEditorModal isOpen={editorModalState.isOpen} onClose={() => setEditorModalState({ isOpen: false, content: null })} onSave={handleSave} cardToEdit={editorModalState.content} />
                 <ImportFlashcardsModal isOpen={importModalOpen} onClose={() => setImportModalOpen(false)} onImport={handleImport} />
+                <ManageFlashcardsModal isOpen={manageModalOpen} onClose={() => setManageModalOpen(false)} currentFlashcards={flashcards} onDelete={handleBulkDelete} />
             </div>
         );
     }
@@ -598,6 +631,10 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
                             <button onClick={() => setImportModalOpen(true)} className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow-sm transition-colors" title="Import">
                                 <ImportIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                                 <span className="hidden sm:inline">Import</span>
+                            </button>
+                            <button onClick={() => setManageModalOpen(true)} className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 shadow-sm transition-colors" title="Manage Cards">
+                                <CollectionIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                                <span className="hidden sm:inline">Manage</span>
                             </button>
                         </div>
                     )}
@@ -648,6 +685,7 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
             <FlashcardEditorModal isOpen={editorModalState.isOpen} onClose={() => setEditorModalState({ isOpen: false, content: null })} onSave={handleSave} cardToEdit={editorModalState.content} />
             <ConfirmModal isOpen={confirmModalState.isOpen} onClose={() => setConfirmModalState({ isOpen: false, onConfirm: null })} onConfirm={confirmModalState.onConfirm} title="Delete Flashcard" message="Are you sure you want to delete this flashcard?" />
             <ImportFlashcardsModal isOpen={importModalOpen} onClose={() => setImportModalOpen(false)} onImport={handleImport} />
+            <ManageFlashcardsModal isOpen={manageModalOpen} onClose={() => setManageModalOpen(false)} currentFlashcards={flashcards} onDelete={handleBulkDelete} />
         </div>
     );
 };

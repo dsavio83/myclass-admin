@@ -621,10 +621,15 @@ const ExportEmailModal: React.FC<{
     );
 };
 
+import { useContentUpdate } from '../../context/ContentUpdateContext';
+// ... previous imports
+
 export const GenericContentView: React.FC<GenericContentViewProps> = ({ lessonId, user, resourceType }) => {
     const [version, setVersion] = useState(0);
+    const { triggerContentUpdate } = useContentUpdate();
     const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, [resourceType], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, resourceType, user]);
 
+    // ... (rest of state items)
     const [modalState, setModalState] = useState<{ isOpen: boolean; content: Content | null }>({ isOpen: false, content: null });
     const [confirmModalState, setConfirmModalState] = useState<{ isOpen: boolean; onConfirm: (() => void) | null }>({ isOpen: false, onConfirm: null });
     const [isAddingPdf, setIsAddingPdf] = useState(false);
@@ -680,6 +685,7 @@ export const GenericContentView: React.FC<GenericContentViewProps> = ({ lessonId
                 }
             }
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             showToast(`${resourceInfo.label} saved successfully!`, 'success');
         } catch (e) {
             showToast('Failed to save content.', 'error');
@@ -693,6 +699,7 @@ export const GenericContentView: React.FC<GenericContentViewProps> = ({ lessonId
             try {
                 await api.deleteContent(contentId);
                 setVersion(v => v + 1);
+                triggerContentUpdate(); // Update sidebar counts
                 showToast(`${resourceInfo.label} deleted.`, 'error');
             } catch (e) {
                 showToast('Failed to delete content.', 'error');
@@ -707,6 +714,7 @@ export const GenericContentView: React.FC<GenericContentViewProps> = ({ lessonId
             const newStatus = !item.isPublished;
             await api.updateContent(item._id, { isPublished: newStatus });
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             showToast(`Content ${newStatus ? 'published' : 'unpublished'} successfully`, 'success');
         } catch (error) {
             console.error('Failed to toggle publish status:', error);

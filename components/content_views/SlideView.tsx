@@ -10,6 +10,7 @@ import { PdfViewer } from './PdfViewer';
 import { useToast } from '../../context/ToastContext';
 import { ContentStatusBanner } from '../common/ContentStatusBanner';
 import { formatCount } from '../../utils/formatUtils';
+import { useContentUpdate } from '../../context/ContentUpdateContext';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Configure worker - using local worker file with CDN fallback
@@ -917,6 +918,7 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
 
 export const SlideView: React.FC<SlideViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
+    const { triggerContentUpdate } = useContentUpdate();
 
     useEffect(() => {
         console.log('[SlideView] LessonId changed:', lessonId);
@@ -946,6 +948,7 @@ export const SlideView: React.FC<SlideViewProps> = ({ lessonId, user }) => {
         const confirmAction = async () => {
             await api.deleteContent(contentId);
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             showToast('Slides deleted successfully.', 'success');
             setConfirmModalState({ isOpen: false, onConfirm: null });
         };
@@ -958,6 +961,7 @@ export const SlideView: React.FC<SlideViewProps> = ({ lessonId, user }) => {
             const newStatus = !slideContent.isPublished;
             await api.updateContent(slideContent._id, { isPublished: newStatus });
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             showToast(`Slides ${newStatus ? 'published' : 'unpublished'} successfully`, 'success');
         } catch (error) {
             console.error('Failed to toggle publish status:', error);
@@ -997,11 +1001,10 @@ export const SlideView: React.FC<SlideViewProps> = ({ lessonId, user }) => {
 
                     {!isLoading && !slideContent && (
                         canEdit ? (
-                            <UploadForm
-                                lessonId={lessonId}
-                                onUpload={() => setVersion(v => v + 1)}
-                                onExpand={() => setFullscreenMode(true)}
-                            />
+                            <UploadForm lessonId={lessonId} onUpload={() => {
+                                setVersion(v => v + 1);
+                                triggerContentUpdate();
+                            }} onExpand={() => { }} />
                         ) : (
                             <div className="text-center py-20 bg-white dark:bg-gray-800/50 rounded-lg">
                                 <SlideIcon className="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600" />

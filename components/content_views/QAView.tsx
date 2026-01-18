@@ -4,11 +4,12 @@ import { RichTextEditor } from '../common/RichTextEditor';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
 import { QAIcon } from '../icons/ResourceTypeIcons';
-import { PlusIcon, EditIcon, TrashIcon, ChevronRightIcon, DownloadIcon, XIcon, EyeIcon } from '../icons/AdminIcons';
+import { PlusIcon, EditIcon, TrashIcon, ChevronRightIcon, DownloadIcon, XIcon, EyeIcon, UploadCloudIcon } from '../icons/AdminIcons';
 import { PublishToggle } from '../common/PublishToggle';
 import { UnpublishedContentMessage } from '../common/UnpublishedContentMessage';
 import { ConfirmModal } from '../ConfirmModal';
 import { useSession } from '../../context/SessionContext';
+import { useContentUpdate } from '../../context/ContentUpdateContext';
 import { useToast } from '../../context/ToastContext';
 import { FontSizeControl } from '../FontSizeControl';
 import { jsPDF } from 'jspdf';
@@ -281,6 +282,217 @@ const QAEditorModal: React.FC<QAEditorModalProps> = ({ isOpen, onClose, onSave, 
     );
 };
 
+// --- Import Modal Interface & Component ---
+interface ParsedQA {
+    id: number;
+    question: string;
+    answer: string;
+    isValid: boolean;
+}
+
+const QAImportModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onImport: (items: any[]) => Promise<void>;
+}> = ({ isOpen, onClose, onImport }) => {
+    const [text, setText] = useState('');
+    const [parsedItems, setParsedItems] = useState<ParsedQA[]>([]);
+    const [step, setStep] = useState<'input' | 'preview'>('input');
+    const [isImporting, setIsImporting] = useState(false);
+
+    // Default Metadata for import
+    const [defaultMarks, setDefaultMarks] = useState(2);
+    const [defaultType, setDefaultType] = useState<QuestionType>('Basic');
+    const [defaultCP, setDefaultCP] = useState<CognitiveProcess>('CP1');
+
+    const parseText = () => {
+        if (!text.trim()) return;
+
+        const items: ParsedQA[] = [];
+        const lines = text.split('\n');
+        let currentQ = '';
+        let currentA = '';
+        let currentId = 0;
+        let isCollectingQ = false;
+        let isCollectingA = false;
+
+        const finalizeItem = () => {
+            if (currentQ && currentA) {
+                items.push({
+                    id: ++currentId,
+                    question: currentQ.trim(),
+                    answer: currentA.trim(),
+                    isValid: true
+                });
+            }
+            currentQ = '';
+            currentA = '';
+        };
+
+        const qStartRegex = /^(?:Q|Question)?\s*\d+[\.\)\:]|^(?:Q|Question)\s*[\.\)\:]/i;
+        const aStartRegex = /^(?:A|Ans|Answer)\s*[\.\)\:]/i;
+
+        for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (!trimmedLine) continue;
+
+            if (qStartRegex.test(trimmedLine)) {
+                finalizeItem();
+                const cleanLine = trimmedLine.replace(/^(?:Q|Question)?\s*\d*[\.\)\:]\s*/i, '').trim();
+                currentQ = cleanLine;
+                isCollectingQ = true;
+                isCollectingA = false;
+            } else if (aStartRegex.test(trimmedLine)) {
+                const cleanLine = trimmedLine.replace(/^(?:A|Ans|Answer)\s*[\.\)\:]\s*/i, '').trim();
+                currentA = cleanLine;
+                isCollectingQ = false;
+                isCollectingA = true;
+            } else {
+                if (isCollectingA) {
+                    currentA += '<br>' + trimmedLine;
+                } else if (isCollectingQ) {
+                    currentQ += '<br>' + trimmedLine;
+                }
+            }
+        }
+        finalizeItem();
+
+        setParsedItems(items);
+        setStep('preview');
+    };
+
+    const handleImport = async () => {
+        setIsImporting(true);
+        try {
+            const contentData = parsedItems.map(item => ({
+                title: item.question,
+                body: item.answer,
+                metadata: {
+                    marks: defaultMarks,
+                    questionType: defaultType,
+                    cognitiveProcess: defaultCP
+                },
+                isPublished: true
+            }));
+
+            await onImport(contentData);
+            onClose();
+            setText('');
+            setParsedItems([]);
+            setStep('input');
+        } catch (e) {
+            console.error(e);
+            // Error handling usually in parent
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white dark:bg-gray-800 w-full max-w-4xl h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+                <div className="px-6 py-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
+                    <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                        <UploadCloudIcon className="w-5 h-5 text-indigo-500" />
+                        Import Q&A
+                    </h2>
+                    <button onClick={onClose} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors">
+                        <XIcon className="w-6 h-6 text-gray-500 dark:text-gray-400" />
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900/50">
+                    {step === 'input' ? (
+                        <div className="space-y-4 h-full flex flex-col">
+                            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-200">
+                                <strong>Instructions:</strong> Paste your Q&A text below. Format example:<br />
+                                <code>Q1. What is React?</code><br />
+                                <code>Ans: A library for web interfaces.</code><br /><br />
+                                Ensure each question starts with "Q" or number, and answer starts with "Ans" or "A".
+                            </div>
+                            <textarea
+                                value={text}
+                                onChange={e => setText(e.target.value)}
+                                className="flex-1 w-full p-4 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 font-mono text-sm leading-relaxed"
+                                placeholder={`Q1. Question 1 text here...\nAns: Answer text here...\n\nQ2. Question 2 text here...\nAns: Answer text here...`}
+                            />
+                        </div>
+                    ) : (
+                        <div className="space-y-6">
+                            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                                <h3 className="text-sm font-bold text-gray-500 uppercase mb-3">Default Metadata (Applied to all)</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="text-xs font-medium text-gray-500 mb-1 block">Marks</label>
+                                        <select value={defaultMarks} onChange={e => setDefaultMarks(Number(e.target.value))} className="w-full text-sm rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-gray-900">
+                                            {[1, 2, 3, 4, 5, 6].map(m => <option key={m} value={m}>{m} Marks</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-medium text-gray-500 mb-1 block">Type</label>
+                                        <select value={defaultType} onChange={e => setDefaultType(e.target.value as any)} className="w-full text-sm rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-gray-900">
+                                            <option value="Basic">Basic</option>
+                                            <option value="Average">Average</option>
+                                            <option value="Profound">Profound</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-medium text-gray-500 mb-1 block">Cognitive Process</label>
+                                        <select value={defaultCP} onChange={e => setDefaultCP(e.target.value as any)} className="w-full text-sm rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-gray-900">
+                                            {Object.entries(COGNITIVE_PROCESSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 flex justify-between">
+                                    <span>Parsed Items ({parsedItems.length})</span>
+                                    <button onClick={() => setStep('input')} className="text-indigo-600 dark:text-indigo-400 text-xs hover:underline">Edit Input</button>
+                                </h3>
+                                {parsedItems.map((item, idx) => (
+                                    <div key={idx} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <div className="font-semibold text-gray-900 dark:text-gray-100 mb-2 flex gap-2">
+                                            <span className="text-indigo-500 shrink-0">Q{idx + 1}:</span>
+                                            <span dangerouslySetInnerHTML={{ __html: processContentForHTML(item.question) }} />
+                                        </div>
+                                        <div className="text-gray-600 dark:text-gray-300 ml-4 flex gap-2">
+                                            <span className="text-green-600 font-medium shrink-0">Ans:</span>
+                                            <span dangerouslySetInnerHTML={{ __html: processContentForHTML(item.answer) }} />
+                                        </div>
+                                    </div>
+                                ))}
+                                {parsedItems.length === 0 && <div className="text-center text-gray-500">No items parsed. Check your format.</div>}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 border-t dark:border-gray-700 flex justify-end gap-3">
+                    {step === 'input' ? (
+                        <>
+                            <button onClick={onClose} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors">Cancel</button>
+                            <button onClick={parseText} disabled={!text.trim()} className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm">
+                                Parse & Preview
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <button onClick={onClose} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors">Cancel</button>
+                            <button onClick={handleImport} disabled={isImporting || parsedItems.length === 0} className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors shadow-sm flex items-center gap-2">
+                                {isImporting ? 'Importing...' : `Import ${parsedItems.length} Items`}
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 const ExportEmailModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -450,6 +662,7 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
     const [confirmModalState, setConfirmModalState] = useState<{ isOpen: boolean; onConfirm: (() => void) | null }>({ isOpen: false, onConfirm: null });
     const [openCardId, setOpenCardId] = useState<string | null>(null);
     const [stats, setStats] = useState<{ downloads: number } | null>(null);
+    const [importModalOpen, setImportModalOpen] = useState(false);
 
     // Export state
     const [exportModalOpen, setExportModalOpen] = useState(false);
@@ -500,14 +713,13 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
     // Restore scroll position after data refresh
     useLayoutEffect(() => {
         if (!isLoading && scrollContainerRef.current) {
-            // Use a slight timeout to ensure DOM is fully painted if needed, 
-            // though layout effect is usually enough. 
-            // Validating if we have a saved position to restore.
             if (savedScrollTop.current > 0) {
                 scrollContainerRef.current.scrollTop = savedScrollTop.current;
             }
         }
     }, [isLoading, qaItems]);
+
+    const { triggerContentUpdate } = useContentUpdate();
 
     const handleSave = async (contentData: { title: string; body: string; metadata: QAMetadata; isPublished: boolean }) => {
         if (modalState.content) {
@@ -516,13 +728,28 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
             await api.addContent({ ...contentData, lessonId, type: resourceType });
         }
         setVersion(v => v + 1);
+        triggerContentUpdate(); // Update sidebar counts
         setModalState({ isOpen: false, content: null });
+    };
+
+    const handleBulkImport = async (items: any[]) => {
+        try {
+            await api.addMultipleContent(items.map(i => ({ ...i, lessonId, type: resourceType })));
+            setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
+            showToast(`Successfully imported ${items.length} Q&A items!`, 'success');
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to import Q&A items', 'error');
+            throw e;
+        }
     };
 
     const handleDelete = (contentId: string) => {
         const confirmAction = async () => {
             await api.deleteContent(contentId);
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             setConfirmModalState({ isOpen: false, onConfirm: null });
         };
         setConfirmModalState({ isOpen: true, onConfirm: confirmAction });
@@ -533,6 +760,7 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
             const newStatus = !item.isPublished;
             await api.updateContent(item._id, { isPublished: newStatus });
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             showToast(`Q&A ${newStatus ? 'published' : 'unpublished'} successfully`, 'success');
         } catch (error) {
             console.error('Failed to toggle publish status:', error);
@@ -729,13 +957,23 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
                         )}
 
                         {canEdit && (
-                            <button
-                                onClick={() => setModalState({ isOpen: true, content: null })}
-                                className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-                            >
-                                <PlusIcon className="w-5 h-5 mr-1" />
-                                <span className="hidden sm:inline">Add New</span>
-                            </button>
+                            <>
+                                <button
+                                    onClick={() => setImportModalOpen(true)}
+                                    className="flex items-center gap-2 px-3 py-2 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors shadow-sm"
+                                    title="Import Q&A"
+                                >
+                                    <UploadCloudIcon className="w-5 h-5" />
+                                    <span className="hidden sm:inline">Import</span>
+                                </button>
+                                <button
+                                    onClick={() => setModalState({ isOpen: true, content: null })}
+                                    className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                                >
+                                    <PlusIcon className="w-5 h-5 mr-1" />
+                                    <span className="hidden sm:inline">Add New</span>
+                                </button>
+                            </>
                         )}
                     </div>
                 </div>
@@ -777,6 +1015,13 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
                     contentToEdit={modalState.content}
                 />
             )}
+
+            <QAImportModal
+                isOpen={importModalOpen}
+                onClose={() => setImportModalOpen(false)}
+                onImport={handleBulkImport}
+            />
+
             <ConfirmModal
                 isOpen={confirmModalState.isOpen}
                 onClose={() => setConfirmModalState({ isOpen: false, onConfirm: null })}

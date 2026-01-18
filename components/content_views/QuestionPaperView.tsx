@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useContentUpdate } from '../../context/ContentUpdateContext';
 import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
@@ -295,6 +296,7 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onCancel: (
 export const QuestionPaperView: React.FC<QuestionPaperViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
     const [showUploadForm, setShowUploadForm] = useState(false);
+    const { triggerContentUpdate } = useContentUpdate();
     // Fetch 'questionPaper' type content
     const { data: grouped, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['questionPaper'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user]);
     const papers = grouped?.[0]?.docs || [];
@@ -333,6 +335,7 @@ export const QuestionPaperView: React.FC<QuestionPaperViewProps> = ({ lessonId, 
             onConfirm: async () => {
                 await api.deleteContent(id);
                 setVersion(v => v + 1);
+                triggerContentUpdate(); // Update sidebar counts
                 showToast('Deleted', 'success');
                 setConfirmModal({ isOpen: false, onConfirm: null });
             }
@@ -344,6 +347,7 @@ export const QuestionPaperView: React.FC<QuestionPaperViewProps> = ({ lessonId, 
             const newStatus = !item.isPublished;
             await api.updateContent(item._id, { isPublished: newStatus });
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             showToast(`Question Paper ${newStatus ? 'published' : 'unpublished'} successfully`, 'success');
         } catch (error) {
             console.error('Failed to toggle publish status:', error);
@@ -471,7 +475,11 @@ export const QuestionPaperView: React.FC<QuestionPaperViewProps> = ({ lessonId, 
                 </div>
 
                 <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar">
-                    {showUploadForm && <UploadForm lessonId={lessonId} onUpload={() => { setVersion(v => v + 1); setShowUploadForm(false); }} onCancel={() => setShowUploadForm(false)} />}
+                    {showUploadForm && <UploadForm lessonId={lessonId} onUpload={() => {
+                        setVersion(v => v + 1);
+                        triggerContentUpdate();
+                        setShowUploadForm(false);
+                    }} onCancel={() => setShowUploadForm(false)} />}
 
                     {isLoading && <div className="text-center py-12 text-gray-500">Loading question papers...</div>}
                     {!isLoading && papers.length === 0 && !showUploadForm && (

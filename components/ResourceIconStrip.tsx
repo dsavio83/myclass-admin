@@ -4,6 +4,8 @@ import { useApi } from '../hooks/useApi';
 import { getCountsByLessonId } from '../services/api';
 import { RESOURCE_TYPES } from '../constants';
 
+import { useContentUpdate } from '../context/ContentUpdateContext';
+
 interface ResourceIconStripProps {
   lessonId: string | null;
   selectedType: ResourceType | null;
@@ -47,9 +49,10 @@ export const ResourceIconStrip: React.FC<ResourceIconStripProps> = ({
   onSelectType,
   collapsed = false,
 }) => {
+  const { updateVersion } = useContentUpdate();
   const { data: counts } = useApi<ResourceCounts>(
     () => getCountsByLessonId(lessonId!),
-    [lessonId],
+    [lessonId, updateVersion],
     !!lessonId
   );
 

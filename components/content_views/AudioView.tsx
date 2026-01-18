@@ -686,8 +686,11 @@ const AddAudioForm: React.FC<{ lessonId: string; onAdd: () => void; onCancel: ()
     );
 };
 
+import { useContentUpdate } from '../../context/ContentUpdateContext';
+
 export const AudioView: React.FC<AudioViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
+    const { triggerContentUpdate } = useContentUpdate();
     const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['audio'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user]);
     const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; onConfirm: (() => void) | null }>({ isOpen: false, onConfirm: null });
     const [showAddForm, setShowAddForm] = useState(false);
@@ -714,6 +717,7 @@ export const AudioView: React.FC<AudioViewProps> = ({ lessonId, user }) => {
             try {
                 await api.deleteContent(contentId);
                 setVersion(v => v + 1);
+                triggerContentUpdate(); // Update sidebar counts
                 showToast('Audio deleted successfully', 'success');
             } catch (e) {
                 showToast('Failed to delete audio', 'error');
@@ -728,6 +732,7 @@ export const AudioView: React.FC<AudioViewProps> = ({ lessonId, user }) => {
             const newStatus = !item.isPublished;
             await api.updateContent(item._id, { isPublished: newStatus });
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             showToast(`Audio ${newStatus ? 'published' : 'unpublished'} successfully`, 'success');
         } catch (error) {
             console.error('Failed to toggle publish status:', error);
@@ -737,6 +742,7 @@ export const AudioView: React.FC<AudioViewProps> = ({ lessonId, user }) => {
 
     const handleAddSuccess = () => {
         setVersion(v => v + 1);
+        triggerContentUpdate(); // Update sidebar counts
         setShowAddForm(false);
     };
 

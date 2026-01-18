@@ -234,9 +234,11 @@ const QuestionCard: React.FC<QuestionCardProps> = ({ question, index, totalQuest
 };
 
 // --- Main View ---
+import { useContentUpdate } from '../../context/ContentUpdateContext';
 
 export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
+    const { triggerContentUpdate } = useContentUpdate();
     const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['quiz'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user]);
     const { showToast } = useToast();
 
@@ -349,6 +351,7 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user }) => {
             const newStatus = !quiz.isPublished;
             await api.updateContent(quiz._id, { isPublished: newStatus });
             setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
             showToast(`Quiz ${newStatus ? 'published' : 'unpublished'} successfully`, 'success');
         } catch (error) {
             console.error('Failed to toggle publish status:', error);

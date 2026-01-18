@@ -240,6 +240,9 @@ export const updateContent = (id: string, updates: Partial<Omit<Content, '_id'>>
 export const deleteContent = (id: string): Promise<{ success: boolean }> =>
     apiRequest(`/content/${id}`, { method: 'DELETE' });
 
+export const deleteMultipleContent = (ids: string[]): Promise<{ success: boolean; message: string; deletedCount: number }> =>
+    apiRequest('/content/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) });
+
 
 
 // --- Breadcrumbs ---

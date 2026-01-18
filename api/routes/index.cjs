@@ -3152,6 +3152,49 @@ router.delete('/content/:id', async (req, res) => {
     }
 });
 
+// Bulk delete content
+router.post('/content/bulk-delete', async (req, res) => {
+    try {
+        const { ids } = req.body;
+
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ success: false, message: 'No IDs provided' });
+        }
+
+        console.log(`[Bulk Delete] Deleting ${ids.length} content items`);
+
+        // Find items to delete to clean up Cloudinary
+        const itemsToDelete = await Content.find({ _id: { $in: ids } });
+
+        for (const item of itemsToDelete) {
+            if (item.storage === 'cloudinary' && item.file && item.file.publicId) {
+                try {
+                    let resourceType = 'raw';
+                    if (item.type === 'video' || item.type === 'audio') {
+                        resourceType = 'video';
+                    } else if (item.file.mime && item.file.mime.startsWith('image/')) {
+                        resourceType = 'image';
+                    }
+                    await cloudinary.uploader.destroy(item.file.publicId, { resource_type: resourceType });
+                } catch (e) {
+                    console.error(`[Bulk Delete] Failed to delete Cloudinary file for ${item._id}:`, e.message);
+                }
+            }
+        }
+
+        const result = await Content.deleteMany({ _id: { $in: ids } });
+
+        res.json({
+            success: true,
+            message: `${result.deletedCount} items deleted successfully`,
+            deletedCount: result.deletedCount
+        });
+    } catch (error) {
+        console.error('[Bulk Delete] Error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 module.exports = router;
 
 

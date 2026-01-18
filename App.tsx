@@ -5,6 +5,7 @@ import { TeacherView } from './components/TeacherView';
 import { FirstTimeLogin } from './components/FirstTimeLogin';
 import { SessionProvider, useSession } from './context/SessionContext';
 import { ToastProvider } from './context/ToastContext'; // Import ToastProvider
+import { ContentUpdateProvider } from './context/ContentUpdateContext';
 import { setupDebugKeyboardShortcuts } from './utils/navigationUtils';
 
 const AppContent: React.FC = () => {
@@ -14,7 +15,7 @@ const AppContent: React.FC = () => {
   if (!currentUser) {
     return <Login />;
   }
-  
+
   if (currentUser.isFirstLogin) {
     return <FirstTimeLogin />;
   }
@@ -39,7 +40,9 @@ const App: React.FC = () => {
   return (
     <SessionProvider>
       <ToastProvider> {/* Wrap AppContent with ToastProvider */}
-        <AppContent />
+        <ContentUpdateProvider>
+          <AppContent />
+        </ContentUpdateProvider>
       </ToastProvider>
     </SessionProvider>
   );
