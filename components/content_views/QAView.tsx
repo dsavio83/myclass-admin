@@ -308,8 +308,18 @@ const QAImportModal: React.FC<{
     const parseText = () => {
         if (!text.trim()) return;
 
+        // Pre-process text to handle inline breaks
+        // Ensure Questions start on new line
+        let processedText = text
+            // Handle "Question 1 :", "Q1 :", "கேள்வி 1 :", "வினா 1 :" (allowing space before delimiter)
+            .replace(/([^\n])\s*((?:Q|Question|கேள்வி|வினா)\s*\d*\s*[\.\)\:])/gi, '$1\n$2')
+            // Handle plain numbers "1 :", "1 )" if they look like start of question
+            .replace(/([^\n])\s+(\d+\s*[\.\)\:])/g, '$1\n$2')
+            // Handle Answers "Ans :", "Answer :", "பதில் :", "விடை :"
+            .replace(/([^\n])\s*((?:A|Ans|Answer|பதில்|விடை)\s*[\.\)\:])/gi, '$1\n$2');
+
         const items: ParsedQA[] = [];
-        const lines = text.split('\n');
+        const lines = processedText.split('\n');
         let currentQ = '';
         let currentA = '';
         let currentId = 0;
@@ -329,8 +339,13 @@ const QAImportModal: React.FC<{
             currentA = '';
         };
 
-        const qStartRegex = /^(?:Q|Question)?\s*\d+[\.\)\:]|^(?:Q|Question)\s*[\.\)\:]/i;
-        const aStartRegex = /^(?:A|Ans|Answer)\s*[\.\)\:]/i;
+        // Regex to identify start of a Question
+        // Supports: Q1, Question 1, 1., வினா 1, கேள்வி 1, etc. (with optional space before punctuation)
+        const qStartRegex = /^(?:Q|Question|கேள்வி|வினா)?\s*\d+\s*[\.\)\:]|^(?:Q|Question|கேள்வி|வினா)\s*[\.\)\:]/i;
+
+        // Regex to identify start of an Answer
+        // Supports: Ans, Answer, A, பதில், விடை (with optional space before punctuation)
+        const aStartRegex = /^(?:A|Ans|Answer|பதில்|விடை)\s*[\.\)\:]/i;
 
         for (const line of lines) {
             const trimmedLine = line.trim();
@@ -338,12 +353,18 @@ const QAImportModal: React.FC<{
 
             if (qStartRegex.test(trimmedLine)) {
                 finalizeItem();
-                const cleanLine = trimmedLine.replace(/^(?:Q|Question)?\s*\d*[\.\)\:]\s*/i, '').trim();
+                // Check if it's strictly just a number which might be a list inside an answer
+                // However, our pre-processing tries to force newlines for potential questions. 
+                // We assume if it matches qStartRegex at the start of a trimmed line, it's a new question.
+
+                // Remove the prefix (e.g. "Q1 :", "கேள்வி 1 :") to get the content
+                const cleanLine = trimmedLine.replace(/^(?:Q|Question|கேள்வி|வினா)?\s*\d*\s*[\.\)\:]\s*/i, '').trim();
                 currentQ = cleanLine;
                 isCollectingQ = true;
                 isCollectingA = false;
             } else if (aStartRegex.test(trimmedLine)) {
-                const cleanLine = trimmedLine.replace(/^(?:A|Ans|Answer)\s*[\.\)\:]\s*/i, '').trim();
+                // Remove prefix (e.g. "Ans:", "பதில்:")
+                const cleanLine = trimmedLine.replace(/^(?:A|Ans|Answer|பதில்|விடை)\s*[\.\)\:]\s*/i, '').trim();
                 currentA = cleanLine;
                 isCollectingQ = false;
                 isCollectingA = true;
@@ -407,10 +428,10 @@ const QAImportModal: React.FC<{
                     {step === 'input' ? (
                         <div className="space-y-4 h-full flex flex-col">
                             <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-200">
-                                <strong>Instructions:</strong> Paste your Q&A text below. Format example:<br />
-                                <code>Q1. What is React?</code><br />
-                                <code>Ans: A library for web interfaces.</code><br /><br />
-                                Ensure each question starts with "Q" or number, and answer starts with "Ans" or "A".
+                                <strong>Instructions:</strong> Paste your Q&A text below. Supports English and Tamil formats.<br />
+                                Examples:<br />
+                                <code>Q1. What is React?</code> ... <code>Ans: A library...</code><br />
+                                Auto-splits text based on markers: Q, Question, Ans, Answer, கேள்வி, வினா, பதில், விடை.
                             </div>
                             <textarea
                                 value={text}
@@ -720,6 +741,15 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
     }, [isLoading, qaItems]);
 
     const { triggerContentUpdate } = useContentUpdate();
+
+    // Trigger MathJax rendering when content changes
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.MathJax && window.MathJax.typesetPromise) {
+            setTimeout(() => {
+                window.MathJax.typesetPromise();
+            }, 50);
+        }
+    }, [qaItems, openCardId, version]); // Re-run when items list changes, a card is opened, or manual version update
 
     const handleSave = async (contentData: { title: string; body: string; metadata: QAMetadata; isPublished: boolean }) => {
         if (modalState.content) {

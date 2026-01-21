@@ -45,12 +45,15 @@
         inlineMath: [['$', '$'], ['\\(', '\\)']],
         displayMath: [['$$', '$$'], ['\\[', '\\]']]
       },
-      svg: {
-        fontCache: 'global'
+      chtml: {
+        fontURL: 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/output/chtml/fonts/woff-v2'
+      },
+      startup: {
+        typeset: false // We will handle typesetting manually
       }
     };
   </script>
-  <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
+  <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">
   </script>
   <!-- PDF.js from Mozilla -->
   <!-- Removed CDN link in favor of local pdfjs-dist package -->

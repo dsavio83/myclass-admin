@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Quill from 'quill';
 import 'quill/dist/quill.snow.css';
 import { SaveFormat } from '../../types';
@@ -293,11 +293,45 @@ const TablePropertiesModal = ({ isOpen, onClose, onSave, initialProps, targetEle
 
 // --- Context Menu Component ---
 const ContextMenu = ({ x, y, onAction, onClose }: any) => {
+    const menuRef = useRef<HTMLDivElement>(null);
+    const [coords, setCoords] = useState({ top: y, left: x, opacity: 0 });
+
     useEffect(() => {
         const handleClick = () => onClose();
         document.addEventListener('click', handleClick);
         return () => document.removeEventListener('click', handleClick);
     }, [onClose]);
+
+    useLayoutEffect(() => {
+        if (menuRef.current) {
+            const rect = menuRef.current.getBoundingClientRect();
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+
+            let nextX = x;
+            let nextY = y;
+
+            // Horizontal adjustment (Shift)
+            if (x + rect.width > winW) {
+                nextX = winW - rect.width - 10;
+            }
+
+            // Vertical adjustment (Flip or Shift)
+            if (y + rect.height > winH) {
+                nextY = y - rect.height;
+                // If flipping goes off-top, shift to top instead
+                if (nextY < 10) {
+                    nextY = winH - rect.height - 10;
+                }
+            }
+
+            // Boundary safety
+            nextX = Math.max(10, nextX);
+            nextY = Math.max(10, nextY);
+
+            setCoords({ top: nextY, left: nextX, opacity: 1 });
+        }
+    }, [x, y]);
 
     const MenuItem = ({ icon, label, onClick, textClass = "text-gray-700 hover:text-indigo-600", isLast = false }: any) => (
         <button onClick={onClick} className={`w-full text-left px-4 py-2 text-sm ${textClass} hover:bg-indigo-50 flex items-center gap-2 ${isLast ? 'border-b border-gray-100 mb-1 pb-2' : ''}`}>
@@ -308,8 +342,9 @@ const ContextMenu = ({ x, y, onAction, onClose }: any) => {
 
     return (
         <div
-            className="fixed z-[110] bg-white rounded-lg shadow-xl border border-gray-200 py-1 w-56 animate-fade-in"
-            style={{ top: y, left: x }}
+            ref={menuRef}
+            className="fixed z-[110] bg-white rounded-lg shadow-xl border border-gray-200 py-1 w-56 animate-fade-in transition-opacity duration-150"
+            style={{ top: coords.top, left: coords.left, opacity: coords.opacity }}
         >
             <div className="px-3 py-1.5 text-xs font-bold text-gray-400 uppercase tracking-wider">Rows</div>
             <MenuItem
@@ -362,6 +397,49 @@ const ContextMenu = ({ x, y, onAction, onClose }: any) => {
     );
 };
 
+// --- Preview Modal with MathJax ---
+const PreviewModal = ({ isOpen, onClose, content }: any) => {
+    const previewRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (isOpen && previewRef.current && typeof window !== 'undefined' && window.MathJax && window.MathJax.typesetPromise) {
+            // Reset MathJax content first if needed, though typesetPromise usually handles it
+            previewRef.current.innerHTML = content;
+            window.MathJax.typesetPromise([previewRef.current]).catch((err: any) => console.error('MathJax typeset failed', err));
+        }
+    }, [isOpen, content]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900">
+                    <h3 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                        <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                        Content Preview (with MathJax)
+                    </h3>
+                    <button onClick={onClose} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-gray-500 dark:text-gray-400">
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-8 bg-white dark:bg-gray-800">
+                    <div
+                        ref={previewRef}
+                        className="prose dark:prose-invert max-w-none prose-lg leading-relaxed font-tau-paalai"
+                    // Content is set via ref to ensure MathJax works cleanly
+                    />
+                </div>
+                <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex justify-end">
+                    <button onClick={onClose} className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow transition-colors">
+                        Close Preview
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export const RichTextEditor: React.FC<RichTextEditorProps & { hideHeader?: boolean }> = ({ initialContent, onChange, onDownload, onSave, onCancel, onPublish, isPublished, placeholder, height = 'h-full', hideHeader = false }) => {
     const editorRef = useRef<HTMLDivElement>(null);
     const quillInstance = useRef<any>(null);
@@ -376,6 +454,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps & { hideHeader?: boole
     const [showInsertTable, setShowInsertTable] = useState(false);
     const [showTableProps, setShowTableProps] = useState(false);
     const [showHtmlInput, setShowHtmlInput] = useState(false);
+    const [showPreview, setShowPreview] = useState(false);
 
     // Context Menu State
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
@@ -411,7 +490,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps & { hideHeader?: boole
                 [{ 'script': 'sub' }, { 'script': 'super' }],
                 [{ 'list': 'ordered' }, { 'list': 'bullet' }],
                 [{ 'align': [] }],
-                ['image', 'video', 'formula'],
+                ['image', 'video'], // Removed 'formula' as we use MathJax directly via text
                 ['table_custom'],
                 ['clean']
             ];
@@ -611,6 +690,31 @@ export const RichTextEditor: React.FC<RichTextEditorProps & { hideHeader?: boole
         onChange(quillInstance.current.root.innerHTML);
     };
 
+    const handleInsertMath = (isBlock: boolean) => {
+        if (!quillInstance.current) return;
+        const range = quillInstance.current.getSelection(true);
+        const text = quillInstance.current.getText(range.index, range.length);
+
+        // Use $\displaystyle for block-style math that flows inline
+        // Use $ for standard inline math
+        const openDelim = isBlock ? '$\\displaystyle ' : '$';
+        const closeDelim = '$';
+
+        // If replacing text, use it. If no text, insert placeholder or just empty space.
+        const content = text || ' ';
+        const newText = `${openDelim}${content}${closeDelim}`;
+
+        quillInstance.current.deleteText(range.index, range.length);
+        quillInstance.current.insertText(range.index, newText);
+
+        // Move cursor to the middle if plain insertion
+        if (!text) {
+            quillInstance.current.setSelection(range.index + openDelim.length, 1); // Select the space
+        }
+    };
+
+    // ... (rest of context menu actions)
+
     const openProperties = () => {
         const { table, row, cell } = targetElements;
         // Pre-fill props
@@ -670,11 +774,36 @@ export const RichTextEditor: React.FC<RichTextEditorProps & { hideHeader?: boole
     return (
         <div className={`flex flex-col ${height} bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden relative`}>
             {!hideHeader && (
-                <div className="bg-indigo-50 px-6 py-2 border-b border-indigo-100 flex justify-between items-center flex-shrink-0">
-                    <h3 className="text-lg font-bold text-indigo-900 font-tamil">
+                <div className="bg-indigo-50 px-6 py-2 border-b border-indigo-100 flex justify-between items-center flex-shrink-0 gap-4 flex-wrap">
+                    <h3 className="text-lg font-bold text-indigo-900 font-tamil whitespace-nowrap">
                         Advanced Editor
                     </h3>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                            onClick={() => handleInsertMath(false)}
+                            className="px-3 py-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1 shadow-sm font-mono"
+                            title="Inline Math ($ ... $)"
+                        >
+                            <span className="text-lg leading-none mb-1">$</span> Inline
+                        </button>
+                        <button
+                            onClick={() => handleInsertMath(true)}
+                            className="px-3 py-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1 shadow-sm"
+                            title="Display Math (Inline Flow)"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                            Formula
+                        </button>
+
+                        <button
+                            onClick={() => setShowPreview(true)}
+                            className="px-3 py-1.5 text-xs font-semibold text-purple-700 bg-white border border-purple-200 rounded-lg hover:bg-purple-50 flex items-center gap-1 shadow-sm"
+                            title="Preview Content (with Math)"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                            Preview
+                        </button>
+
                         <button onClick={() => setShowHtmlInput(true)} className="px-3 py-1.5 text-xs font-semibold text-teal-700 bg-white border border-teal-200 rounded-lg hover:bg-teal-50 flex items-center gap-1">
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
                             Paste HTML
@@ -744,6 +873,12 @@ export const RichTextEditor: React.FC<RichTextEditorProps & { hideHeader?: boole
                     onSave={handleApplyTableProps}
                     initialProps={tableProps}
                     targetElements={targetElements}
+                />
+
+                <PreviewModal
+                    isOpen={showPreview}
+                    onClose={() => setShowPreview(false)}
+                    content={quillInstance.current ? quillInstance.current.root.innerHTML : ''}
                 />
 
                 {contextMenu && (

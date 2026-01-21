@@ -331,7 +331,7 @@ const SavedVideoViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
     );
 };
 
-const AddVideoForm: React.FC<{ lessonId: string; onAdd: () => void; onCancel: () => void; }> = ({ lessonId, onAdd, onCancel }) => {
+const AddVideoForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd: () => void; onCancel: () => void; }> = ({ lessonId, existingTitles, onAdd, onCancel }) => {
     const [activeTab, setActiveTab] = useState<'upload' | 'youtube'>('upload');
     const [title, setTitle] = useState('');
     const [folderPath, setFolderPath] = useState('');
@@ -365,7 +365,16 @@ const AddVideoForm: React.FC<{ lessonId: string; onAdd: () => void; onCancel: ()
                     const lessonNum = extractNum(lessonName);
 
                     // Required Format: Unit-SubUnit-Lesson LessonName.mp4
-                    const formattedTitle = `${unitNum}-${subUnitNum}-${lessonNum} ${lessonName}.mp4`;
+                    const baseTitle = `${unitNum}-${subUnitNum}-${lessonNum} ${lessonName}`;
+                    const extension = '.mp4';
+                    let formattedTitle = `${baseTitle}${extension}`;
+
+                    // Ensure title uniqueness
+                    let counter = 1;
+                    while (existingTitles.some(t => t.toLowerCase() === formattedTitle.toLowerCase())) {
+                        formattedTitle = `${baseTitle} (${counter})${extension}`;
+                        counter++;
+                    }
 
                     const cleanPart = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '');
                     const hierarchyParts = [
@@ -789,6 +798,7 @@ export const VideoView: React.FC<VideoViewProps> = ({ lessonId, user }) => {
                     {!isLoading && showAddForm && (
                         <AddVideoForm
                             lessonId={lessonId}
+                            existingTitles={videoContents.map(v => v.title)}
                             onAdd={handleAddSuccess}
                             onCancel={() => setShowAddForm(false)}
                         />

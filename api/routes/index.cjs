@@ -420,20 +420,8 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 
             uploadFolder = hierarchyFolderParts.join('/');
 
-            // 4. Construct Public ID (File Name)
-            // Format: UnitNum-SubUnitNum-LessonNum.ext (e.g., 1-1-2)
-            const extractNum = (str) => {
-                if (!str) return '0';
-                const match = str.match(/\d+/);
-                return match ? match[0] : '0';
-            };
-
-            const unitNum = extractNum(hierarchy.unitName);
-            const subUnitNum = extractNum(hierarchy.subUnitName);
-            const lessonNum = extractNum(hierarchy.lessonName);
-
-            // Required name format: 4.2.3
-            desiredFileName = `${unitNum}.${subUnitNum}.${lessonNum}`;
+            // Use the title for the filename instead of constructing from numbers
+            desiredFileName = cleanForFilename(title);
         }
 
         console.log('[Upload] Target Folder:', uploadFolder);
@@ -719,15 +707,8 @@ router.post('/upload/signature', async (req, res) => {
             ].filter(part => part && part.length > 0);
             uploadFolder = hierarchyFolderParts.join('/');
 
-            const extractNum = (str) => {
-                if (!str) return '0';
-                const match = str.match(/\d+/);
-                return match ? match[0] : '0';
-            };
-            const unitNum = extractNum(hierarchy.unitName);
-            const subUnitNum = extractNum(hierarchy.subUnitName);
-            const lessonNum = extractNum(hierarchy.lessonName);
-            desiredFileName = `${unitNum}.${subUnitNum}.${lessonNum}`;
+            // Use the title for the filename instead of constructing from numbers
+            desiredFileName = cleanForFilename(title);
         }
 
         // 3. Generate Timestamp and Params

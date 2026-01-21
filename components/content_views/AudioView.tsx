@@ -336,7 +336,7 @@ const SavedAudioViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
     );
 };
 
-const AddAudioForm: React.FC<{ lessonId: string; onAdd: () => void; onCancel: () => void; }> = ({ lessonId, onAdd, onCancel }) => {
+const AddAudioForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd: () => void; onCancel: () => void; }> = ({ lessonId, existingTitles, onAdd, onCancel }) => {
     const [activeTab, setActiveTab] = useState<'upload' | 'link'>('upload');
     const [title, setTitle] = useState('');
     const [folderPath, setFolderPath] = useState('');
@@ -367,7 +367,16 @@ const AddAudioForm: React.FC<{ lessonId: string; onAdd: () => void; onCancel: ()
                     const subUnitNum = extractNum(subUnitName);
                     const lessonNum = extractNum(lessonName);
 
-                    const formattedTitle = `${unitNum}-${subUnitNum}-${lessonNum} ${lessonName}.mp3`;
+                    const baseTitle = `${unitNum}-${subUnitNum}-${lessonNum} ${lessonName}`;
+                    const extension = '.mp3';
+                    let formattedTitle = `${baseTitle}${extension}`;
+
+                    // Ensure title uniqueness
+                    let counter = 1;
+                    while (existingTitles.some(t => t.toLowerCase() === formattedTitle.toLowerCase())) {
+                        formattedTitle = `${baseTitle} (${counter})${extension}`;
+                        counter++;
+                    }
 
                     const cleanPart = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '');
                     const hierarchyParts = [
@@ -776,7 +785,7 @@ export const AudioView: React.FC<AudioViewProps> = ({ lessonId, user }) => {
                     {isLoading && <div className="text-center py-10">Loading audio...</div>}
 
                     {!isLoading && showAddForm && (
-                        <AddAudioForm lessonId={lessonId} onAdd={handleAddSuccess} onCancel={() => setShowAddForm(false)} />
+                        <AddAudioForm lessonId={lessonId} existingTitles={audioContents.map(a => a.title)} onAdd={handleAddSuccess} onCancel={() => setShowAddForm(false)} />
                     )}
 
                     {!isLoading && !showAddForm && audioContents.length > 0 && (

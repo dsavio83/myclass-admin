@@ -171,10 +171,16 @@ export const ClassManagement: React.FC = () => {
     const [lessonVersion, setLessonVersion] = useState(0);
 
     const { data: classes, isLoading: isLoadingClasses } = useApi<Class[]>(api.getClasses, [classVersion]);
-    const { data: subjects, isLoading: isLoadingSubjects } = useApi<Subject[]>(() => api.getSubjectsByClassId(selectedClassId!), [selectedClassId, subjectVersion], !!selectedClassId);
-    const { data: units, isLoading: isLoadingUnits } = useApi<Unit[]>(() => api.getUnitsBySubjectId(selectedSubjectId!), [selectedSubjectId, unitVersion], !!selectedSubjectId);
-    const { data: subUnits, isLoading: isLoadingSubUnits } = useApi<SubUnit[]>(() => api.getSubUnitsByUnitId(selectedUnitId!), [selectedUnitId, subUnitVersion], !!selectedUnitId);
-    const { data: lessons, isLoading: isLoadingLessons } = useApi<Lesson[]>(() => api.getLessonsBySubUnitId(selectedSubUnitId!), [selectedSubUnitId, lessonVersion], !!selectedSubUnitId);
+    const { data: subjects, isLoading: isLoadingSubjects, setData: setSubjects } = useApi<Subject[]>(() => api.getSubjectsByClassId(selectedClassId!), [selectedClassId, subjectVersion], !!selectedClassId);
+    const { data: units, isLoading: isLoadingUnits, setData: setUnits } = useApi<Unit[]>(() => api.getUnitsBySubjectId(selectedSubjectId!), [selectedSubjectId, unitVersion], !!selectedSubjectId);
+    const { data: subUnits, isLoading: isLoadingSubUnits, setData: setSubUnits } = useApi<SubUnit[]>(() => api.getSubUnitsByUnitId(selectedUnitId!), [selectedUnitId, subUnitVersion], !!selectedUnitId);
+    const { data: lessons, isLoading: isLoadingLessons, setData: setLessons } = useApi<Lesson[]>(() => api.getLessonsBySubUnitId(selectedSubUnitId!), [selectedSubUnitId, lessonVersion], !!selectedSubUnitId);
+
+    // Clear downstream data immediately when selection changes (prevents stale data flicker)
+    React.useEffect(() => { setSubjects(null); }, [selectedClassId, setSubjects]);
+    React.useEffect(() => { setUnits(null); }, [selectedSubjectId, setUnits]);
+    React.useEffect(() => { setSubUnits(null); }, [selectedUnitId, setSubUnits]);
+    React.useEffect(() => { setLessons(null); }, [selectedSubUnitId, setLessons]);
 
     const openModal = (level: Level, itemToEdit: Item | null = null) => setModalState({ isOpen: true, level, itemToEdit });
     const closeModal = () => setModalState({ isOpen: false, level: null, itemToEdit: null });

@@ -253,6 +253,31 @@ interface FlashcardViewProps {
     user: User;
 }
 
+// --- MathJax Block Component ---
+// Ensures that MathJax formulas are preserved even if React re-renders
+const MathJaxBlock: React.FC<{ content: string; className?: string; style?: React.CSSProperties }> = ({ content, className, style }) => {
+    const ref = useRef<HTMLDivElement>(null);
+
+    // This effect runs on every render to ensure that if React resets the DOM (removing MathJax output),
+    // we immediately re-run MathJax typesetting on this specific element.
+    useEffect(() => {
+        if (ref.current && window.MathJax && window.MathJax.typesetPromise) {
+            // Use promise to ensure we don't conflict with other runs
+            window.MathJax.typesetPromise([ref.current])
+                .catch((err: any) => console.warn('MathJax typeset failed:', err));
+        }
+    });
+
+    return (
+        <div
+            ref={ref}
+            className={className}
+            style={style}
+            dangerouslySetInnerHTML={{ __html: processContentForHTML(content) }}
+        />
+    );
+};
+
 // --- Single Flashcard Component ---
 const Flashcard: React.FC<{
     card: Content;
@@ -280,7 +305,11 @@ const Flashcard: React.FC<{
                     style={{ background: frontTheme.bg }}
                 >
                     <div className="text-5xl mb-6 opacity-80 shrink-0">❓</div>
-                    <div className={contentClass} style={{ color: 'inherit' }} dangerouslySetInnerHTML={{ __html: processContentForHTML(card.title) }} />
+                    <MathJaxBlock
+                        content={card.title}
+                        className={contentClass}
+                        style={{ color: 'inherit' }}
+                    />
                     <p className="absolute bottom-6 text-xs uppercase tracking-widest opacity-60 animate-pulse shrink-0">Tap to Flip</p>
                     {isAdmin && isCurrent && (
                         <div className="absolute top-4 right-4 flex gap-2 z-10" onClick={e => e.stopPropagation()}>
@@ -301,7 +330,11 @@ const Flashcard: React.FC<{
                     style={{ background: backTheme.bg }}
                 >
                     <div className="text-5xl mb-6 opacity-80 shrink-0">💡</div>
-                    <div className={contentClass} style={{ color: 'inherit' }} dangerouslySetInnerHTML={{ __html: processContentForHTML(card.body) }} />
+                    <MathJaxBlock
+                        content={card.body}
+                        className={contentClass}
+                        style={{ color: 'inherit' }}
+                    />
                     {isAdmin && isCurrent && (
                         <div className="absolute top-4 right-4 flex gap-2 z-10" onClick={e => e.stopPropagation()}>
                             {onTogglePublish && (
@@ -404,6 +437,16 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
         setFrontTheme(getFrontTheme());
         setBackTheme(getBackTheme());
     }, [lessonId]);
+
+    // Trigger MathJax rendering whenever the card changes or content updates
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.MathJax && window.MathJax.typesetPromise) {
+            // Small timeout to ensure DOM is updated
+            setTimeout(() => {
+                window.MathJax.typesetPromise();
+            }, 50);
+        }
+    }, [currentCardIndex, flashcards, version]);
 
     const handleNext = useCallback(() => {
         if (currentCardIndex < flashcards.length - 1) {
