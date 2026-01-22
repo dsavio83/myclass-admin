@@ -14,8 +14,8 @@ interface ResourceInfo {
 }
 
 export const RESOURCE_TYPES: ResourceInfo[] = [
-  { key: 'book', label: 'Book', Icon: BookIcon, description: 'Read and explore the core textbook content.', color: 'text-blue-600', gradient: 'from-black to-blue-600 dark:from-white dark:to-blue-400' },
   { key: 'slide', label: 'Slides', Icon: SlideIcon, description: 'Visual presentations and lesson overviews.', color: 'text-orange-500', gradient: 'from-black to-orange-500 dark:from-white dark:to-orange-400' },
+  { key: 'book', label: 'Book', Icon: BookIcon, description: 'Read and explore the core textbook content.', color: 'text-blue-600', gradient: 'from-black to-blue-600 dark:from-white dark:to-blue-400' },
   { key: 'notes', label: 'Notes', Icon: NotesIcon, description: 'Detailed study notes and key points.', color: 'text-amber-500', gradient: 'from-black to-amber-500 dark:from-white dark:to-amber-400' },
   { key: 'video', label: 'Video', Icon: VideoIcon, description: 'Educational videos and explanations.', color: 'text-red-600', gradient: 'from-black to-red-600 dark:from-white dark:to-red-400' },
   { key: 'audio', label: 'Audio', Icon: AudioIcon, description: 'Audio lessons and pronunciations.', color: 'text-purple-600', gradient: 'from-black to-purple-600 dark:from-white dark:to-purple-400' },
