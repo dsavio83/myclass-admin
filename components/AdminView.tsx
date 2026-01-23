@@ -17,8 +17,14 @@ import { AdminState } from '../types';
 import { useScrollPersistence } from '../hooks/useScrollPersistence';
 import { SelectionRestorationIndicator } from './SelectionRestorationIndicator';
 import { DownloadLogsPage } from './admin/DownloadLogsPage';
+import { TeacherRequests } from './TeacherRequests';
 
 export const AdminView: React.FC = () => {
+    // ... (rest of imports are fine, just adding TeacherRequests at top and switch case below)
+    // I will use multi_replace for this to be clean or just split standard replace.
+    // Actually, I can just add the import at the top first, then the case.
+    // Wait, replace_file_content only works for contiguous blocks. I'll use multi_replace.
+
     const { session, logout, updateAdminState } = useSession();
     const { user, adminState: state } = session;
 
@@ -192,6 +198,8 @@ export const AdminView: React.FC = () => {
                 return isFullAdmin ? <AdminCollectionsPanel /> : <div className="p-8 text-center">Access Denied</div>;
             case 'downloads':
                 return isFullAdmin ? <DownloadLogsPage user={user} /> : <div className="p-8 text-center">Access Denied</div>;
+            case 'teacher-requests':
+                return isFullAdmin ? <TeacherRequests /> : <div className="p-8 text-center">Access Denied</div>;
             case 'reports':
                 return <ReportsPage />;
             default:

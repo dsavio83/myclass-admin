@@ -15,6 +15,7 @@ const allManagementLinks = [
     { id: 'user-management', label: 'User Management', roles: ['admin'] },
     { id: 'collections-management', label: 'Database Management', roles: ['admin'] },
     { id: 'downloads', label: 'Download Logs', roles: ['admin'] },
+    { id: 'teacher-requests', label: 'Teacher Requests', roles: ['admin'] },
     { id: 'reports', label: 'Reports', roles: ['admin', 'teacher'] },
 ];
 
@@ -35,8 +36,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, activePage, 
                         key={link.id}
                         onClick={() => setActivePage(link.id)}
                         className={`w-full text-left px-3 py-2 text-sm font-medium rounded-md transition-colors ${activePage === link.id
-                                ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
-                                : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
+                            ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
+                            : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
                             }`}
                     >
                         {link.label}

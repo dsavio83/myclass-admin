@@ -9,7 +9,11 @@ const userSchema = new mongoose.Schema({
     status: { type: String, enum: ['active', 'inactive'], default: 'active' },
     isFirstLogin: { type: Boolean, default: true },
     mobileNumber: { type: String },
-    canEdit: { type: Boolean, default: false }
+    canEdit: { type: Boolean, default: false },
+    requestRole: { type: String, default: null },
+    district: { type: String },
+    subDistrict: { type: String },
+    school: { type: String }
 }, { timestamps: true });
 
 const classSchema = new mongoose.Schema({

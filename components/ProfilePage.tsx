@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { updateUserProfile, changePassword } from '../services/api';
+import { updateUserProfile, changePassword, requestTeacherRole } from '../services/api';
 import { useToast } from '../context/ToastContext';
 
 interface ProfilePageProps {
@@ -51,11 +51,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onBack }) => {
             setIsEditing(false);
         } catch (error: any) {
             console.error('Error updating profile:', error);
-            
+
             // Handle duplicate field errors
             if (error.message && (error.message.includes('already exists') || error.message.includes('duplicate'))) {
                 let errorMessage = 'Profile update failed';
-                
+
                 if (error.message.includes('Email already exists')) {
                     errorMessage = 'Email address is already in use by another user';
                 } else if (error.message.includes('Username already exists')) {
@@ -63,7 +63,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onBack }) => {
                 } else if (error.message.includes('Mobile number already exists')) {
                     errorMessage = 'Mobile number is already in use by another user';
                 }
-                
+
                 // Show sweet alert for duplicate errors
                 if (typeof window !== 'undefined' && (window as any).Swal && typeof (window as any).Swal.fire === 'function') {
                     try {
@@ -92,7 +92,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onBack }) => {
 
     const handlePasswordSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         if (passwordData.newPassword !== passwordData.confirmPassword) {
             showToast('New passwords do not match', 'error');
             return;
@@ -115,6 +115,19 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onBack }) => {
         } catch (error: any) {
             console.error('Error changing password:', error);
             showToast(error.message || 'Failed to change password. Please try again.', 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleRequestTeacher = async () => {
+        setIsLoading(true);
+        try {
+            await requestTeacherRole(user._id);
+            showToast('Teacher role request sent successfully!', 'success');
+        } catch (error: any) {
+            console.log(error);
+            showToast(error.message || 'Failed to send request', 'error');
         } finally {
             setIsLoading(false);
         }
@@ -224,7 +237,32 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ user, onBack }) => {
                                 </div>
                                 <div>
                                     <h3 className="text-lg font-medium text-gray-900 dark:text-white">{user.name}</h3>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400 capitalize">{user.role}</p>
+                                    <div className="text-sm text-gray-500 dark:text-gray-400 capitalize flex items-center gap-2">
+                                        {user.role}
+                                        {user.role !== 'teacher' && user.role !== 'admin' && (
+                                            <>
+                                                {(!user.teacherRequestStatus || user.teacherRequestStatus === 'rejected') && (
+                                                    <button
+                                                        onClick={handleRequestTeacher}
+                                                        className="px-2 py-0.5 text-xs bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition-colors"
+                                                        title={user.teacherRequestStatus === 'rejected' ? "Request again" : "Request to become a teacher"}
+                                                    >
+                                                        {user.teacherRequestStatus === 'rejected' ? "Request Again" : "Request Teacher Access"}
+                                                    </button>
+                                                )}
+                                                {user.teacherRequestStatus === 'pending' && (
+                                                    <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded">
+                                                        Request Pending
+                                                    </span>
+                                                )}
+                                                {user.teacherRequestStatus === 'rejected' && (
+                                                    <span className="px-2 py-0.5 text-xs bg-red-100 text-red-800 rounded">
+                                                        Rejected
+                                                    </span>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">

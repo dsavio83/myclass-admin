@@ -355,3 +355,17 @@ export const getDownloadStats = (): Promise<{
 // --- Stats ---
 
 export const getPlatformStats = (): Promise<PlatformStats> => apiRequest('/stats');
+
+// --- User Teacher Request ---
+
+export const requestTeacherRole = (userId: string): Promise<{ success: boolean; message: string }> =>
+    apiRequest('/user/request-teacher', { method: 'POST', body: JSON.stringify({ userId }) });
+
+export const getTeacherRequests = (): Promise<User[]> =>
+    apiRequest('/user/teacher-requests');
+
+export const approveTeacherRequest = (userId: string): Promise<{ success: boolean; message: string; user: User }> =>
+    apiRequest(`/user/approve-teacher/${userId}`, { method: 'POST' });
+
+export const rejectTeacherRequest = (userId: string): Promise<{ success: boolean; message: string }> =>
+    apiRequest(`/user/reject-teacher/${userId}`, { method: 'POST' });

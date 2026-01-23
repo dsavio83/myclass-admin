@@ -3176,6 +3176,86 @@ router.post('/content/bulk-delete', async (req, res) => {
     }
 });
 
+
+// --- User Teacher Request Routes ---
+
+// Request to become a teacher
+router.post('/user/request-teacher', async (req, res) => {
+    try {
+        const { userId } = req.body;
+        if (!userId) return res.status(400).json({ message: 'User ID required' });
+
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        if (user.role === 'teacher' || user.role === 'admin') {
+            return res.status(400).json({ message: 'User is already a teacher or admin' });
+        }
+
+        if (user.requestRole === 'teacher') {
+            return res.status(400).json({ message: 'Request already pending' });
+        }
+
+        user.requestRole = 'teacher';
+        await user.save();
+
+        res.json({ success: true, message: 'Teacher request submitted successfully' });
+    } catch (error) {
+        console.error('Error requesting teacher role:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// Get all teacher requests (Admin only)
+router.get('/user/teacher-requests', async (req, res) => {
+    try {
+        // Fetch users who have requested 'teacher' role, or are approved/rejected
+        const users = await User.find({
+            requestRole: { $in: ['teacher', 'approved', 'rejected'] }
+        }).select('-password');
+        res.json(users);
+    } catch (error) {
+        console.error('Error fetching teacher requests:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// Approve teacher request
+router.post('/user/approve-teacher/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        user.role = 'teacher';
+        user.requestRole = 'approved'; // Mark as approved
+        await user.save();
+
+        res.json({ success: true, message: 'User approved as teacher', user });
+    } catch (error) {
+        console.error('Error approving teacher:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// Reject teacher request
+router.post('/user/reject-teacher/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        user.requestRole = 'rejected'; // Mark as rejected
+        await user.save();
+
+        res.json({ success: true, message: 'Teacher request rejected' });
+    } catch (error) {
+        console.error('Error rejecting teacher:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
 module.exports = router;
+
 
 

@@ -11,7 +11,9 @@ const userSchema = new mongoose.Schema({
     mobileNumber: { type: String },
     canEdit: { type: Boolean, default: false },
     totalDownloads: { type: Number, default: 0 },
-    worksheetDownloads: { type: Number, default: 0 }
+    worksheetDownloads: { type: Number, default: 0 },
+    requestRole: { type: String, default: null },
+    teacherRequestStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: null }
 }, { timestamps: true });
 
 const classSchema = new mongoose.Schema({

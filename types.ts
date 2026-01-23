@@ -14,6 +14,10 @@ export interface User {
   mobileNumber?: string;
   isFirstLogin: boolean;
   canEdit?: boolean; // New property for granular edit permissions
+  requestRole?: string | null;
+  district?: string;
+  subDistrict?: string;
+  school?: string;
 }
 
 export interface Class {
