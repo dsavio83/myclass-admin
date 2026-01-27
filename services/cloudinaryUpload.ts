@@ -20,6 +20,8 @@ interface UploadConfig {
   onProgress?: (progress: UploadProgress) => void;
   timeout?: number;
   retries?: number;
+  folder?: string;
+  resourceType?: 'auto' | 'image' | 'video' | 'raw';
 }
 
 class CloudinaryUploadService {
@@ -28,15 +30,17 @@ class CloudinaryUploadService {
   private timeout: number;
 
   constructor() {
-    this.cloudName = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME || '';
-    this.uploadPreset = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET || '';
+    // Try to get config from Vite env vars first (standard), then fallback to process.env (legacy/compat)
+    this.cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || process.env.REACT_APP_CLOUDINARY_CLOUD_NAME || '';
+    this.uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET || '';
     this.timeout = 300000; // 5 minutes default timeout
-    
+
     // Log configuration for debugging
     console.log('[CloudinaryUpload] Configuration:', {
       cloudName: this.cloudName ? 'SET' : 'MISSING',
       uploadPreset: this.uploadPreset ? 'SET' : 'MISSING',
-      timeout: this.timeout
+      timeout: this.timeout,
+      envSource: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME ? 'VITE_ENV' : 'PROCESS_ENV'
     });
   }
 
@@ -44,14 +48,15 @@ class CloudinaryUploadService {
    * Upload file to Cloudinary with progress tracking
    */
   async uploadFile(config: UploadConfig): Promise<CloudinaryUploadResult> {
-    const { file, onProgress, timeout = this.timeout, retries = 3 } = config;
+    const { file, onProgress, timeout = this.timeout, retries = 3, folder, resourceType = 'auto' } = config;
 
     // Validate configuration before upload
+    // Validate configuration before upload
     if (!this.cloudName) {
-      throw new Error('Cloudinary cloud name is not configured. Please set REACT_APP_CLOUDINARY_CLOUD_NAME environment variable.');
+      throw new Error('Cloudinary cloud name is not configured. Please set VITE_CLOUDINARY_CLOUD_NAME environment variable in .env.local.');
     }
     if (!this.uploadPreset) {
-      throw new Error('Cloudinary upload preset is not configured. Please set REACT_APP_CLOUDINARY_UPLOAD_PRESET environment variable.');
+      throw new Error('Cloudinary upload preset is not configured. Please set VITE_CLOUDINARY_UPLOAD_PRESET environment variable in .env.local.');
     }
 
     console.log('[CloudinaryUpload] Starting upload:', {
@@ -59,24 +64,31 @@ class CloudinaryUploadService {
       fileSize: file.size,
       fileType: file.type,
       timeout: timeout,
-      retries: retries
+      retries: retries,
+      folder: folder,
+      resourceType: resourceType
     });
 
     return new Promise((resolve, reject) => {
       let attempt = 0;
-      
+
       const attemptUpload = () => {
         attempt++;
-        
+
         const xhr = new XMLHttpRequest();
         const formData = new FormData();
-        
+
         // Set timeout
         xhr.timeout = timeout;
 
         // Add file and upload preset
         formData.append('file', file);
         formData.append('upload_preset', this.uploadPreset);
+
+        // Add folder if specified
+        if (folder) {
+          formData.append('folder', folder);
+        }
 
         // Progress tracking
         xhr.upload.onprogress = (e) => {
@@ -97,7 +109,7 @@ class CloudinaryUploadService {
             statusText: xhr.statusText,
             responseLength: xhr.responseText.length
           });
-          
+
           if (xhr.status === 200) {
             try {
               const response = JSON.parse(xhr.responseText);
@@ -118,16 +130,35 @@ class CloudinaryUploadService {
               reject(new Error('Failed to parse Cloudinary response'));
             }
           } else {
-            const error = new Error(`Cloudinary upload failed: ${xhr.statusText} (${xhr.status})`);
+            // Try to parse detailed error message from Cloudinary
+            let errorMessage = `Cloudinary upload failed: ${xhr.statusText} (${xhr.status})`;
+            try {
+              const errorResponse = JSON.parse(xhr.responseText);
+              if (errorResponse.error && errorResponse.error.message) {
+                errorMessage = `Cloudinary Error: ${errorResponse.error.message}`;
+              }
+            } catch (e) {
+              // keep default error message
+            }
+
+            const error = new Error(errorMessage);
             console.error('[CloudinaryUpload] Upload failed:', {
               status: xhr.status,
               statusText: xhr.statusText,
               response: xhr.responseText
             });
-            if (attempt < retries) {
-              console.warn(`Upload attempt ${attempt} failed, retrying...`);
-              setTimeout(attemptUpload, 1000 * attempt); // Exponential backoff
+
+            // Do not retry regarding configuration errors (400 Bad Request, 401 Unauthorized)
+            // Retry only for 5xx server errors or 0/network errors
+            if (xhr.status >= 500 || xhr.status === 0) {
+              if (attempt < retries) {
+                console.warn(`Upload attempt ${attempt} failed, retrying...`);
+                setTimeout(attemptUpload, 1000 * attempt); // Exponential backoff
+              } else {
+                reject(error);
+              }
             } else {
+              // For 4xx errors, fail immediately
               reject(error);
             }
           }
@@ -154,8 +185,8 @@ class CloudinaryUploadService {
           }
         };
 
-        // Start upload
-        xhr.open('POST', `https://api.cloudinary.com/v1_1/${this.cloudName}/auto/upload`);
+        // Start upload - Use specific resource type or auto
+        xhr.open('POST', `https://api.cloudinary.com/v1_1/${this.cloudName}/${resourceType}/upload`);
         xhr.send(formData);
       };
 

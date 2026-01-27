@@ -10,6 +10,13 @@ import { PublishToggle } from './common/PublishToggle';
 import { RichTextEditor } from './common/RichTextEditor';
 import Swal from 'sweetalert2';
 
+const Spinner = ({ className }: { className?: string }) => (
+    <svg className={`animate-spin text-white ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+);
+
 const ImportJsonModal: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -18,10 +25,13 @@ const ImportJsonModal: React.FC<{
     const [input, setInput] = useState('');
     const [error, setError] = useState<string | null>(null);
 
+    const [isImporting, setIsImporting] = useState(false);
+
     useEffect(() => {
         if (isOpen) {
             setInput('');
             setError(null);
+            setIsImporting(false);
         }
     }, [isOpen]);
 
@@ -144,7 +154,8 @@ const ImportJsonModal: React.FC<{
             .replace(/&#60;/g, '<')           // Replace &#60; with <
             .replace(/&#62;/g, '>')           // Replace &#62; with >
             .replace(/[\u201C\u201D]/g, '"')  // Replace smart quotes with "
-            .replace(/[\u2018\u2019]/g, "'"); // Replace smart single quotes with '
+            .replace(/[\u2018\u2019]/g, "'")  // Replace smart single quotes with '
+            .replace(/`/g, "");               // Remove backticks per user request to convert to plain text
 
         console.log('[sanitizeAndParse] Cleaned input (first 200 chars):', clean.substring(0, 200));
         console.log('[sanitizeAndParse] Cleaned input length:', clean.length);
@@ -222,13 +233,26 @@ const ImportJsonModal: React.FC<{
         }
     };
 
-    const handleImport = () => {
-        const parsed = sanitizeAndParse(input);
-        if (parsed) {
-            onImport(parsed);
-            onClose();
-        } else {
-            setError("Invalid JSON. Cannot import.");
+    const handleImport = async () => {
+        setIsImporting(true);
+        setError(null);
+
+        // Allow UI to update and give visual feedback
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        try {
+            const parsed = sanitizeAndParse(input);
+            if (parsed) {
+                onImport(parsed);
+                onClose();
+            } else {
+                setError("Invalid JSON. Cannot import.");
+            }
+        } catch (e) {
+            console.error("Import error:", e);
+            setError("An unexpected error occurred.");
+        } finally {
+            setIsImporting(false);
         }
     };
 
@@ -256,7 +280,8 @@ const ImportJsonModal: React.FC<{
                             .replace(/&#60;/g, '<')           // Replace &#60; with <
                             .replace(/&#62;/g, '>')           // Replace &#62; with >
                             .replace(/[\u201C\u201D]/g, '"')  // Replace smart quotes with "
-                            .replace(/[\u2018\u2019]/g, "'"); // Replace smart single quotes with '
+                            .replace(/[\u2018\u2019]/g, "'")  // Replace smart single quotes with '
+                            .replace(/`/g, "");               // Remove backticks
                         setInput(cleanedValue);
                         setError(null);
                     }}
@@ -275,7 +300,8 @@ const ImportJsonModal: React.FC<{
                             .replace(/&#60;/g, '<')           // Replace &#60; with <
                             .replace(/&#62;/g, '>')           // Replace &#62; with >
                             .replace(/[\u201C\u201D]/g, '"')  // Replace smart quotes with "
-                            .replace(/[\u2018\u2019]/g, "'"); // Replace smart single quotes with '
+                            .replace(/[\u2018\u2019]/g, "'")  // Replace smart single quotes with '
+                            .replace(/`/g, "");               // Remove backticks
 
                         // Insert the cleaned text at cursor position
                         const target = e.target as HTMLTextAreaElement;
@@ -303,8 +329,13 @@ const ImportJsonModal: React.FC<{
                     <button onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500">
                         Cancel
                     </button>
-                    <button onClick={handleImport} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                        Import
+                    <button
+                        onClick={handleImport}
+                        disabled={isImporting}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                        {isImporting && <Spinner className="w-4 h-4" />}
+                        <span>{isImporting ? 'Importing...' : 'Import'}</span>
                     </button>
                 </div>
             </div>
@@ -920,7 +951,7 @@ export const QuizConfiguration: React.FC = () => {
                                                 disabled={!isDirty || isSaving}
                                                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white rounded-md text-sm font-semibold transition-colors h-10"
                                             >
-                                                <SaveIcon className="w-4 h-4" />
+                                                {isSaving ? <Spinner className="w-4 h-4" /> : <SaveIcon className="w-4 h-4" />}
                                                 <span>{isSaving ? 'Saving...' : isDirty ? 'Save Changes' : 'Saved'}</span>
                                             </button>
                                         </div>
@@ -1025,7 +1056,7 @@ export const QuizConfiguration: React.FC = () => {
                                         disabled={!isDirty || isSaving}
                                         className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex flex-col items-center justify-center gap-2 shadow-md"
                                     >
-                                        <SaveIcon className="w-8 h-8" />
+                                        {isSaving ? <Spinner className="w-8 h-8" /> : <SaveIcon className="w-8 h-8" />}
                                         <span className="font-medium">{isSaving ? 'Saving...' : isDirty ? 'Save Changes' : 'Saved'}</span>
                                     </button>
                                 </div>

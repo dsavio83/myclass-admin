@@ -65,7 +65,7 @@ export const UploadContent: React.FC<UploadContentProps> = ({
 
   const handleFileSelect = useCallback((file: File) => {
     const validation = cloudinaryUploadService.validateFile(file);
-    
+
     if (!validation.isValid) {
       onUploadError?.(validation.error || 'File validation failed');
       return;
@@ -135,7 +135,7 @@ export const UploadContent: React.FC<UploadContentProps> = ({
       });
 
       const duplicateCheck = await checkForDuplicate(lessonId, title.trim(), resourceType, selectedFile);
-      
+
       if (duplicateCheck.isDuplicate) {
         setUploadState({
           stage: 'error',
@@ -224,7 +224,7 @@ export const UploadContent: React.FC<UploadContentProps> = ({
 
     } catch (error) {
       console.error('Upload error:', error);
-      
+
       // Handle cleanup if Cloudinary upload succeeded but DB save failed
       if (uploadMode === 'file' && selectedFile) {
         // In a real implementation, we'd need to track if Cloudinary upload succeeded
@@ -336,11 +336,10 @@ export const UploadContent: React.FC<UploadContentProps> = ({
 
       {/* Upload Status Indicator */}
       {uploadState.stage !== 'idle' && (
-        <div className={`mb-6 p-4 rounded-lg ${
-          uploadState.stage === 'success' ? 'bg-green-50 border border-green-200' :
-          uploadState.stage === 'error' ? 'bg-red-50 border border-red-200' :
-          'bg-blue-50 border border-blue-200'
-        }`}>
+        <div className={`mb-6 p-4 rounded-lg ${uploadState.stage === 'success' ? 'bg-green-50 border border-green-200' :
+            uploadState.stage === 'error' ? 'bg-red-50 border border-red-200' :
+              'bg-blue-50 border border-blue-200'
+          }`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               {uploadState.stage === 'uploading' && (
@@ -355,11 +354,10 @@ export const UploadContent: React.FC<UploadContentProps> = ({
               {uploadState.stage === 'error' && (
                 <div className="w-4 h-4 bg-red-500 rounded-full" />
               )}
-              <span className={`font-medium ${
-                uploadState.stage === 'success' ? 'text-green-800' :
-                uploadState.stage === 'error' ? 'text-red-800' :
-                'text-blue-800'
-              }`}>
+              <span className={`font-medium ${uploadState.stage === 'success' ? 'text-green-800' :
+                  uploadState.stage === 'error' ? 'text-red-800' :
+                    'text-blue-800'
+                }`}>
                 {uploadState.message}
               </span>
             </div>
@@ -372,7 +370,7 @@ export const UploadContent: React.FC<UploadContentProps> = ({
               </button>
             )}
           </div>
-          
+
           {/* Progress Bar */}
           {uploadState.stage !== 'success' && uploadState.stage !== 'error' && (
             <div className="mt-3">
@@ -382,9 +380,8 @@ export const UploadContent: React.FC<UploadContentProps> = ({
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
-                  className={`h-2 rounded-full transition-all duration-300 ${
-                    uploadState.stage === 'uploading' ? 'bg-blue-600' : 'bg-green-600'
-                  }`}
+                  className={`h-2 rounded-full transition-all duration-300 ${uploadState.stage === 'uploading' ? 'bg-blue-600' : 'bg-green-600'
+                    }`}
                   style={{ width: `${uploadState.progress}%` }}
                 />
               </div>
@@ -398,22 +395,20 @@ export const UploadContent: React.FC<UploadContentProps> = ({
         <button
           onClick={() => setUploadMode('file')}
           disabled={uploadState.isUploading}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            uploadMode === 'file'
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${uploadMode === 'file'
               ? 'bg-blue-600 text-white shadow-sm'
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-          } ${uploadState.isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            } ${uploadState.isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           Upload File
         </button>
         <button
           onClick={() => setUploadMode('url')}
           disabled={uploadState.isUploading}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-            uploadMode === 'url'
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${uploadMode === 'url'
               ? 'bg-blue-600 text-white shadow-sm'
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-          } ${uploadState.isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            } ${uploadState.isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           External URL
         </button>
@@ -424,11 +419,10 @@ export const UploadContent: React.FC<UploadContentProps> = ({
         {uploadMode === 'file' ? (
           <>
             <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                dragActive
+              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${dragActive
                   ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
                   : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
-              } ${uploadState.isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                } ${uploadState.isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
               onDragEnter={handleDrag}
               onDragLeave={handleDrag}
               onDragOver={handleDrag}
@@ -444,9 +438,8 @@ export const UploadContent: React.FC<UploadContentProps> = ({
               />
               <label
                 htmlFor="file-upload"
-                className={`cursor-pointer flex flex-col items-center space-y-2 ${
-                  uploadState.isUploading ? 'pointer-events-none' : ''
-                }`}
+                className={`cursor-pointer flex flex-col items-center space-y-2 ${uploadState.isUploading ? 'pointer-events-none' : ''
+                  }`}
               >
                 <svg
                   className="w-12 h-12 text-gray-400"
@@ -545,11 +538,10 @@ export const UploadContent: React.FC<UploadContentProps> = ({
             !title.trim() ||
             !lessonId
           }
-          className={`w-full px-4 py-2 text-white rounded-md transition-colors ${
-            uploadState.isUploading
+          className={`w-full px-4 py-2 text-white rounded-md transition-colors ${uploadState.isUploading
               ? 'bg-gray-400 cursor-not-allowed'
               : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
-          }`}
+            }`}
         >
           {uploadState.stage === 'uploading' && (
             <span className="flex items-center justify-center">

@@ -199,16 +199,16 @@ export const NotesView: React.FC<NotesViewProps> = ({ lessonId, user }) => {
         updateStats();
     }, [lessonId]);
 
-    const handleSave = async (body: string) => {
+    const handleSave = async (body: string, isPublished: boolean) => {
         try {
             if (typeof editingNote === 'object' && editingNote !== null) {
-                await api.updateContent(editingNote._id, { body });
+                await api.updateContent(editingNote._id, { body, isPublished });
             } else {
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = body;
                 const textContent = tempDiv.textContent || tempDiv.innerText || '';
                 const title = textContent.trim().substring(0, 50) || `Note - ${new Date().toLocaleDateString()}`;
-                await api.addContent({ title, body, lessonId, type: resourceType });
+                await api.addContent({ title, body, lessonId, type: resourceType, isPublished });
             }
             setVersion(v => v + 1);
             triggerContentUpdate(); // Update sidebar counts
@@ -454,6 +454,7 @@ export const NotesView: React.FC<NotesViewProps> = ({ lessonId, user }) => {
                     <div className="tau-body flex-1 overflow-y-auto min-h-0 pb-3 no-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                         <NoteEditor
                             initialValue={typeof editingNote === 'object' && editingNote !== null ? editingNote.body : ''}
+                            initialIsPublished={typeof editingNote === 'object' && editingNote !== null ? !!editingNote.isPublished : false}
                             onSave={handleSave}
                             onCancel={handleCancelEdit}
                         />

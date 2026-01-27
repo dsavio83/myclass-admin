@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
+import { useBackgroundTask } from '../../context/BackgroundTaskContext'; // Added
 import * as api from '../../services/api';
 import { WorksheetIcon } from '../icons/ResourceTypeIcons';
 import { TrashIcon, UploadCloudIcon, PlusIcon, DownloadIcon, EyeIcon, XIcon, LinkIcon, CheckCircleIcon } from '../icons/AdminIcons';
@@ -138,11 +139,12 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onCancel: (
     const [file, setFile] = useState<File | null>(null);
     const [title, setTitle] = useState('');
     const [folderPath, setFolderPath] = useState('');
-    const [uploadProgress, setUploadProgress] = useState(0);
-    const [isUploading, setIsUploading] = useState(false);
+    // const [uploadProgress, setUploadProgress] = useState(0); // Removed
+    // const [isUploading, setIsUploading] = useState(false); // Removed
     const [isSaving, setIsSaving] = useState(false);
     const [linkUrl, setLinkUrl] = useState('');
     const { showToast } = useToast();
+    const { addTask } = useBackgroundTask(); // Added
 
     // Generate smart defaults based on hierarchy
     useEffect(() => {
@@ -174,7 +176,6 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onCancel: (
         const f = e.target.files?.[0];
         if (f && f.type === 'application/pdf') {
             setFile(f);
-            setUploadProgress(0);
         } else {
             showToast('Please select a valid PDF', 'error');
             setFile(null);
@@ -183,37 +184,23 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onCancel: (
 
     const handleUpload = async () => {
         if (!file || !lessonId) return;
-        setIsUploading(true);
-        setUploadProgress(0);
 
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('lessonId', lessonId);
-        formData.append('type', 'worksheet');
-        formData.append('title', title);
-
+        // Prepare folder path
         let cleanFolder = folderPath.replace(/^(\.\.\/)?uploads\//, '');
-        formData.append('folder', cleanFolder);
 
-        const xhr = new XMLHttpRequest();
-        xhr.upload.addEventListener('progress', e => {
-            if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+        // Add to background queue
+        addTask({
+            type: 'upload',
+            contentType: 'worksheet',
+            title: title,
+            file: file,
+            lessonId: lessonId,
+            folder: cleanFolder,
+            mimeType: file.type
         });
 
-        xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-                showToast('Worksheet uploaded successfully!', 'success');
-                onUpload();
-                onCancel();
-            } else {
-                showToast('Upload failed', 'error');
-            }
-            setIsUploading(false);
-        };
-
-        xhr.onerror = () => { showToast('Network error', 'error'); setIsUploading(false); };
-        xhr.open('POST', '/api/upload');
-        xhr.send(formData);
+        showToast('Upload started in background', 'info');
+        onCancel(); // Close modal immediately
     };
 
     const handleLinkSave = async () => {
@@ -251,26 +238,18 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onCancel: (
 
                 {activeTab === 'upload' && (
                     <div className="space-y-4">
-                        {!isUploading ? (
-                            <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                                <UploadCloudIcon className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                                <label className="block cursor-pointer">
-                                    <span className="text-blue-600 hover:text-blue-500 font-medium">Click to upload</span>
-                                    <span className="text-gray-500"> or drag and drop PDF</span>
-                                    <input type="file" className="hidden" accept=".pdf" onChange={handleFileChange} />
-                                </label>
-                                {file && <p className="mt-2 text-sm font-semibold text-green-600">{file.name}</p>}
-                            </div>
-                        ) : (
-                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden relative">
-                                <div className={`h-4 rounded-full transition-all duration-300 relative overflow-hidden ${uploadProgress === 100 ? 'bg-green-500' : 'bg-blue-600'}`} style={{ width: `${uploadProgress === 100 ? 100 : uploadProgress}%` }}>
-                                    <div className="absolute inset-0 bg-white/30 animate-[shimmer_2s_infinite]"></div>
-                                </div>
-                                <p className="text-center text-xs mt-1 text-gray-500">{uploadProgress === 100 ? 'Processing...' : `Uploading ${uploadProgress}%`}</p>
-                            </div>
-                        )}
-                        <button disabled={!file || isUploading} onClick={handleUpload} className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium shadow-sm">
-                            {isUploading ? 'Uploading...' : 'Save Worksheet'}
+                        <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                            <UploadCloudIcon className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+                            <label className="block cursor-pointer">
+                                <span className="text-blue-600 hover:text-blue-500 font-medium">Click to upload</span>
+                                <span className="text-gray-500"> or drag and drop PDF</span>
+                                <input type="file" className="hidden" accept=".pdf" onChange={handleFileChange} />
+                            </label>
+                            {file && <p className="mt-2 text-sm font-semibold text-green-600">{file.name}</p>}
+                        </div>
+
+                        <button disabled={!file} onClick={handleUpload} className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium shadow-sm">
+                            Upload in Background
                         </button>
                     </div>
                 )}
@@ -292,9 +271,10 @@ import { useContentUpdate } from '../../context/ContentUpdateContext';
 
 export const WorksheetView: React.FC<WorksheetViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
-    const { triggerContentUpdate } = useContentUpdate();
+    const { triggerContentUpdate, updateVersion } = useContentUpdate(); // Added updateVersion
     const [showUploadForm, setShowUploadForm] = useState(false);
-    const { data: grouped, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['worksheet'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user]);
+    // Added updateVersion to dependencies
+    const { data: grouped, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['worksheet'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user, updateVersion]);
     const worksheets = grouped?.[0]?.docs || [];
     const canEdit = user.role === 'admin' || !!user.canEdit;
 
@@ -431,7 +411,15 @@ export const WorksheetView: React.FC<WorksheetViewProps> = ({ lessonId, user }) 
 
     // Handle viewing (increments view count)
     const handleView = async (url: string, id: string) => {
-        setFullscreenUrl(url);
+        // Fix for missing extension in Cloudinary URLs
+        let finalUrl = url;
+        if (url && url.includes('cloudinary') && !url.toLowerCase().endsWith('.pdf')) {
+            // Check if it doesn't have query parameters that might hide the extension
+            if (!url.includes('?')) {
+                finalUrl = `${url}.pdf`;
+            }
+        }
+        setFullscreenUrl(finalUrl);
         // View count increment removed
     };
 

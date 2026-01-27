@@ -3,13 +3,14 @@ import { RichTextEditor } from '../common/RichTextEditor';
 
 interface NoteEditorProps {
     initialValue: string;
-    onSave: (html: string) => Promise<void>;
+    initialIsPublished?: boolean;
+    onSave: (html: string, isPublished: boolean) => Promise<void>;
     onCancel: () => void;
 }
 
-export const NoteEditor: React.FC<NoteEditorProps> = ({ initialValue, onSave, onCancel }) => {
+export const NoteEditor: React.FC<NoteEditorProps> = ({ initialValue, initialIsPublished = false, onSave, onCancel }) => {
     const [content, setContent] = useState(initialValue);
-    const [isPublished, setIsPublished] = useState(false);
+    const [isPublished, setIsPublished] = useState(initialIsPublished);
     const [isSaving, setIsSaving] = useState(false);
 
     const handleSaveClick = async (htmlContent?: string) => {
@@ -23,7 +24,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({ initialValue, onSave, on
             if (!finalContent || finalContent.trim() === '' || finalContent === '<p><br></p>') {
                 finalContent = '<p>New note content...</p>';
             }
-            await onSave(finalContent);
+            await onSave(finalContent, isPublished);
         } catch (e) {
             console.error("Failed to save note", e);
         } finally {
@@ -41,6 +42,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({ initialValue, onSave, on
                     onCancel={onCancel}
                     onPublish={() => setIsPublished(!isPublished)}
                     isPublished={isPublished}
+                    isSaving={isSaving}
                     placeholder="Start writing your notes here..."
                 />
             </div>

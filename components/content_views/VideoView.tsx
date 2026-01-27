@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useContentUpdate } from '../../context/ContentUpdateContext';
+import { useBackgroundTask } from '../../context/BackgroundTaskContext'; // Added
 import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
@@ -339,10 +340,9 @@ const AddVideoForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [file, setFile] = useState<File | null>(null);
-    const [uploadProgress, setUploadProgress] = useState(0);
-    const [isUploading, setIsUploading] = useState(false);
     const [url, setUrl] = useState('');
     const { showToast } = useToast();
+    const { addTask } = useBackgroundTask(); // Added
 
     // Optimized Path and Title Logic - Fast loading with getHierarchy
     useEffect(() => {
@@ -411,7 +411,6 @@ const AddVideoForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd
         if (selectedFile && selectedFile.type.startsWith('video/')) {
             setFile(selectedFile);
             setError(null);
-            setUploadProgress(0);
         } else {
             showToast('Please select a valid video file.', 'error');
             setFile(null);
@@ -421,107 +420,17 @@ const AddVideoForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd
     const handleUploadToCloud = async () => {
         if (!file || !lessonId) return;
 
-        setIsUploading(true);
-        setUploadProgress(0);
+        addTask({
+            type: 'upload',
+            contentType: 'video',
+            title: title,
+            file: file,
+            lessonId: lessonId,
+            mimeType: file.type
+        });
 
-        try {
-            // Step 1: Get Signature
-            showToast('Initializing upload...', 'info');
-            const signatureResponse = await fetch('/api/upload/signature', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    lessonId,
-                    type: 'video',
-                    title,
-                    mimeType: file.type
-                })
-            });
-
-            if (!signatureResponse.ok) {
-                throw new Error('Failed to get upload signature');
-            }
-
-            const { signature, timestamp, cloudName, apiKey, folder, public_id } = await signatureResponse.json();
-
-            // Step 2: Upload to Cloudinary
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('api_key', apiKey);
-            formData.append('timestamp', timestamp.toString());
-            formData.append('signature', signature);
-            formData.append('folder', folder);
-            formData.append('public_id', public_id);
-            formData.append('use_filename', 'true');
-            formData.append('unique_filename', 'true');
-
-            // Use XHR for progress
-            const xhr = new XMLHttpRequest();
-
-            xhr.upload.addEventListener('progress', (e) => {
-                if (e.lengthComputable) {
-                    const percentComplete = Math.round((e.loaded / e.total) * 100);
-                    setUploadProgress(percentComplete);
-                }
-            });
-
-            xhr.addEventListener('load', async () => {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                    try {
-                        const result = JSON.parse(xhr.responseText);
-
-                        // Step 3: Save Metadata to Backend
-                        showToast('Upload finished. Saving...', 'info');
-
-                        const saveResponse = await fetch('/api/content/cloudinary-save', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                lessonId,
-                                title,
-                                type: 'video',
-                                fileUrl: result.secure_url,
-                                publicId: result.public_id,
-                                size: result.bytes,
-                                mimeType: file.type,
-                                resourceType: 'video'
-                            })
-                        });
-
-                        if (saveResponse.ok) {
-                            showToast('Video uploaded and saved successfully!', 'success');
-                            setIsUploading(false);
-                            onAdd();
-                        } else {
-                            const errorData = await saveResponse.json();
-                            throw new Error(errorData.message || 'Failed to save video metadata');
-                        }
-
-                    } catch (e: any) {
-                        console.error('Save error:', e);
-                        showToast(`Save failed: ${e.message}`, 'error');
-                        setIsUploading(false);
-                    }
-                } else {
-                    showToast(`Cloudinary upload failed: ${xhr.statusText}`, 'error');
-                    setIsUploading(false);
-                }
-            });
-
-            xhr.addEventListener('error', () => {
-                showToast('Network error during upload.', 'error');
-                setIsUploading(false);
-            });
-
-            const cloudUrl = `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`;
-            xhr.open('POST', cloudUrl);
-            xhr.send(formData);
-
-        } catch (error: any) {
-            console.error('Upload flow error:', error);
-            showToast(`Upload failed: ${error.message}`, 'error');
-            setIsUploading(false);
-        }
+        showToast('Video upload started in background', 'info');
+        onAdd();
     };
 
     const handleSaveYouTube = async () => {
@@ -600,58 +509,37 @@ const AddVideoForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd
 
                     {activeTab === 'upload' && (
                         <div className="space-y-4">
-                            {!isUploading ? (
-                                <>
-                                    <div className="mt-1 flex items-center justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                                        <div className="space-y-1 text-center">
-                                            <UploadCloudIcon className="mx-auto h-12 w-12 text-gray-400" />
-                                            <div className="flex text-sm text-gray-600 dark:text-gray-400 justify-center">
-                                                <label htmlFor="videoFile" className="relative cursor-pointer bg-transparent rounded-md font-medium text-blue-600 hover:text-blue-500">
-                                                    <span>{file ? 'Change file' : 'Upload a file'}</span>
-                                                    <input
-                                                        id="videoFile"
-                                                        name="videoFile"
-                                                        type="file"
-                                                        className="sr-only"
-                                                        onChange={handleFileChange}
-                                                        accept="video/*"
-                                                    />
-                                                </label>
-                                            </div>
-                                            <p className="text-xs text-gray-500 dark:text-gray-500">
-                                                {file ? file.name : 'MP4, WebM, etc.'}
-                                            </p>
+                            <>
+                                <div className="mt-1 flex items-center justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                    <div className="space-y-1 text-center">
+                                        <UploadCloudIcon className="mx-auto h-12 w-12 text-gray-400" />
+                                        <div className="flex text-sm text-gray-600 dark:text-gray-400 justify-center">
+                                            <label htmlFor="videoFile" className="relative cursor-pointer bg-transparent rounded-md font-medium text-blue-600 hover:text-blue-500">
+                                                <span>{file ? 'Change file' : 'Upload a file'}</span>
+                                                <input
+                                                    id="videoFile"
+                                                    name="videoFile"
+                                                    type="file"
+                                                    className="sr-only"
+                                                    onChange={handleFileChange}
+                                                    accept="video/*"
+                                                />
+                                            </label>
                                         </div>
-                                    </div>
-                                    {file && (
-                                        <button
-                                            onClick={handleUploadToCloud}
-                                            className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                                        >
-                                            Upload & Save
-                                        </button>
-                                    )}
-                                </>
-                            ) : (
-                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden relative">
-                                    <div
-                                        className={`h-4 rounded-full transition-all duration-300 relative overflow-hidden ${uploadProgress === 100 ? 'bg-green-500' : 'bg-blue-600'}`}
-                                        style={{ width: `${uploadProgress === 100 ? 100 : uploadProgress}%` }}
-                                    >
-                                        <div className="absolute inset-0 bg-white/30 animate-[shimmer_2s_infinite]"></div>
-                                    </div>
-                                    <div className="text-center mt-2 flex items-center justify-center gap-2">
-                                        {uploadProgress === 100 ? (
-                                            <>
-                                                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                                                <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">Processing on Server (Please wait)...</p>
-                                            </>
-                                        ) : (
-                                            <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">{uploadProgress}% Uploading...</p>
-                                        )}
+                                        <p className="text-xs text-gray-500 dark:text-gray-500">
+                                            {file ? file.name : 'MP4, WebM, etc.'}
+                                        </p>
                                     </div>
                                 </div>
-                            )}
+                                {file && (
+                                    <button
+                                        onClick={handleUploadToCloud}
+                                        className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                                    >
+                                        Upload in Background
+                                    </button>
+                                )}
+                            </>
                         </div>
                     )}
 
@@ -709,8 +597,8 @@ const AddVideoForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd
 
 export const VideoView: React.FC<VideoViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
-    const { triggerContentUpdate } = useContentUpdate();
-    const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['video'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user]);
+    const { triggerContentUpdate, updateVersion } = useContentUpdate();
+    const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['video'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user, updateVersion]);
     const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; onConfirm: (() => void) | null; }>({ isOpen: false, onConfirm: null, });
     const [showAddForm, setShowAddForm] = useState(false);
     const [stats, setStats] = useState<{ count: number } | null>(null);

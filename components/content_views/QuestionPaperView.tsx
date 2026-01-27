@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useContentUpdate } from '../../context/ContentUpdateContext';
+import { useBackgroundTask } from '../../context/BackgroundTaskContext'; // Added
 import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
@@ -134,11 +135,10 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onCancel: (
     const [file, setFile] = useState<File | null>(null);
     const [examCategory, setExamCategory] = useState('Monthly Test');
     const [examDetail, setExamDetail] = useState('');
-    const [uploadProgress, setUploadProgress] = useState(0);
-    const [isUploading, setIsUploading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [linkUrl, setLinkUrl] = useState('');
     const { showToast } = useToast();
+    const { addTask } = useBackgroundTask(); // Added
 
     // Categories
     const categories = ['Monthly Test', 'Summative Exam', 'Model Exam', 'SSLC Exam'];
@@ -147,7 +147,6 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onCancel: (
         const f = e.target.files?.[0];
         if (f && f.type === 'application/pdf') {
             setFile(f);
-            setUploadProgress(0);
         } else {
             showToast('Please select a valid PDF', 'error');
             setFile(null);
@@ -160,37 +159,20 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onCancel: (
             return;
         }
 
-        setIsUploading(true);
-        setUploadProgress(0);
-
         const title = `${examCategory} ${examDetail}`;
 
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('lessonId', lessonId);
-        formData.append('type', 'questionPaper');
-        formData.append('title', title);
-        formData.append('examCategory', examCategory); // Send category for folder structure
-
-        const xhr = new XMLHttpRequest();
-        xhr.upload.addEventListener('progress', e => {
-            if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+        addTask({
+            type: 'upload',
+            contentType: 'questionPaper',
+            title: title,
+            file: file,
+            lessonId: lessonId,
+            extraData: { examCategory } // Pass examCategory to backend
         });
 
-        xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-                showToast('Question paper uploaded successfully!', 'success');
-                onUpload();
-                onCancel();
-            } else {
-                showToast('Upload failed', 'error');
-            }
-            setIsUploading(false);
-        };
-
-        xhr.onerror = () => { showToast('Network error', 'error'); setIsUploading(false); };
-        xhr.open('POST', '/api/upload');
-        xhr.send(formData);
+        showToast('Question paper upload started in background', 'info');
+        onUpload();
+        onCancel();
     };
 
     const handleLinkSave = async () => {
@@ -256,26 +238,18 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onCancel: (
 
                 {activeTab === 'upload' && (
                     <div className="space-y-4 mt-4">
-                        {!isUploading ? (
-                            <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                                <UploadCloudIcon className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                                <label className="block cursor-pointer">
-                                    <span className="text-blue-600 hover:text-blue-500 font-medium">Click to upload</span>
-                                    <span className="text-gray-500"> or drag and drop PDF</span>
-                                    <input type="file" className="hidden" accept=".pdf" onChange={handleFileChange} />
-                                </label>
-                                {file && <p className="mt-2 text-sm font-semibold text-green-600">{file.name}</p>}
-                            </div>
-                        ) : (
-                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden relative">
-                                <div className={`h-4 rounded-full transition-all duration-300 relative overflow-hidden ${uploadProgress === 100 ? 'bg-green-500' : 'bg-blue-600'}`} style={{ width: `${uploadProgress === 100 ? 100 : uploadProgress}%` }}>
-                                    <div className="absolute inset-0 bg-white/30 animate-[shimmer_2s_infinite]"></div>
-                                </div>
-                                <p className="text-center text-xs mt-1 text-gray-500">{uploadProgress === 100 ? 'Processing...' : `Uploading ${uploadProgress}%`}</p>
-                            </div>
-                        )}
-                        <button disabled={!file || !examDetail || isUploading} onClick={handleUpload} className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium shadow-sm">
-                            {isUploading ? 'Uploading...' : 'Save Question Paper'}
+                        <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                            <UploadCloudIcon className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+                            <label className="block cursor-pointer">
+                                <span className="text-blue-600 hover:text-blue-500 font-medium">Click to upload</span>
+                                <span className="text-gray-500"> or drag and drop PDF</span>
+                                <input type="file" className="hidden" accept=".pdf" onChange={handleFileChange} />
+                            </label>
+                            {file && <p className="mt-2 text-sm font-semibold text-green-600">{file.name}</p>}
+                        </div>
+
+                        <button disabled={!file || !examDetail} onClick={handleUpload} className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium shadow-sm">
+                            Upload in Background
                         </button>
                     </div>
                 )}
@@ -296,9 +270,9 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onCancel: (
 export const QuestionPaperView: React.FC<QuestionPaperViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
     const [showUploadForm, setShowUploadForm] = useState(false);
-    const { triggerContentUpdate } = useContentUpdate();
+    const { triggerContentUpdate, updateVersion } = useContentUpdate();
     // Fetch 'questionPaper' type content
-    const { data: grouped, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['questionPaper'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user]);
+    const { data: grouped, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['questionPaper'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user, updateVersion]);
     const papers = grouped?.[0]?.docs || [];
     const canEdit = user.role === 'admin' || !!user.canEdit;
 

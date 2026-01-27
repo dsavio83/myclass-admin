@@ -3255,6 +3255,33 @@ router.post('/user/reject-teacher/:userId', async (req, res) => {
     }
 });
 
+// Generate Signed URL for Private/Authenticated Access
+router.post('/content/get-signed-url', (req, res) => {
+    try {
+        const { publicId, resourceType, format } = req.body;
+
+        if (!publicId) {
+            return res.status(400).json({ message: 'Missing publicId' });
+        }
+
+        // Generate signed URL
+        // type: 'authenticated' ensures we access it securely even if it's restricted
+        const url = cloudinary.url(publicId, {
+            resource_type: resourceType || 'raw',
+            type: 'authenticated',
+            sign_url: true,
+            secure: true,
+            format: format, // optional, keeping extension
+            expires_at: Math.floor(Date.now() / 1000) + 3600 // 1 hour validity
+        });
+
+        res.json({ url });
+    } catch (error) {
+        console.error('Error generating signed URL:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
 module.exports = router;
 
 

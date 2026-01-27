@@ -11,6 +11,7 @@ import { useToast } from '../../context/ToastContext';
 import { ContentStatusBanner } from '../common/ContentStatusBanner';
 import { formatCount } from '../../utils/formatUtils';
 import { useContentUpdate } from '../../context/ContentUpdateContext';
+import { useBackgroundTask } from '../../context/BackgroundTaskContext'; // Added
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Configure worker - using local worker file with CDN fallback
@@ -490,7 +491,6 @@ const SavedSlideViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
                 console.log('[SavedSlideViewer] Content body:', content.body);
 
                 // If content has a file object (new model) or filePath (legacy), construct the URL
-                // If content has a file object (new model) or filePath (legacy), construct the URL
                 let url = '';
                 if (content.file?.url) {
                     console.log('[SavedSlideViewer] Using Cloudinary URL:', content.file.url);
@@ -528,7 +528,6 @@ const SavedSlideViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
         // logic removed
     }, [content._id]);
 
-    // Handle double-click to enter fullscreen
     // Handle double-click to enter fullscreen - Mobile only
     const handleDoubleClick = useCallback((e: React.MouseEvent) => {
         if (!isMobile) return;
@@ -620,13 +619,11 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
     const [file, setFile] = useState<File | null>(null);
     const [title, setTitle] = useState('');
     const [folderPath, setFolderPath] = useState('');
-    const [uploadProgress, setUploadProgress] = useState(0);
-    const [isUploading, setIsUploading] = useState(false);
-    const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [linkUrl, setLinkUrl] = useState('');
 
     const { showToast } = useToast();
+    const { addTask } = useBackgroundTask(); // Added
 
     // Optimized Title & Path Logic (Matching BookView)
     useEffect(() => {
@@ -679,8 +676,6 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
         if (selectedFile) {
             if (selectedFile.type === "application/pdf") {
                 setFile(selectedFile);
-                setUploadedUrl(null);
-                setUploadProgress(0);
             } else {
                 showToast("Please select a valid PDF file.", 'error');
                 setFile(null);
@@ -691,89 +686,19 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
     const handleUploadToCloud = async () => {
         if (!file || !lessonId) return;
 
-        setIsUploading(true);
-        setUploadProgress(0);
-        setUploadedUrl(null);
-
-        // Refs for tracking actual state to decouple from React renders
-        let actualProgress = 0;
-        let isXhrDone = false;
-        let xhrResponse: any = null;
-        let xhrStatus = 0;
-
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('lessonId', lessonId);
-        formData.append('type', 'slide');
-        formData.append('title', title);
-
         let cleanFolder = folderPath.replace(/^(\.\.\/)?uploads\//, '');
-        formData.append('folder', cleanFolder);
 
-        const xhr = new XMLHttpRequest();
-
-        // Animation Loop
-        const progressInterval = setInterval(() => {
-            setUploadProgress(prev => {
-                let step = 5;
-
-                if (isXhrDone) step = 10;
-
-                const nextProgress = prev + step;
-
-                // For "fast" uploads, actual jumps to 100. So we effectively animate to 100.
-                const ceiling = isXhrDone ? 100 : (actualProgress > 0 ? actualProgress : 5); // Fake at least 5% start
-
-                if (nextProgress >= 100 && isXhrDone) {
-                    clearInterval(progressInterval);
-
-                    if (xhrStatus >= 200 && xhrStatus < 300) {
-                        try {
-                            const result = typeof xhrResponse === 'string' ? JSON.parse(xhrResponse) : xhrResponse;
-                            const url = result.file?.url || result.secure_url || result.url;
-                            setUploadedUrl(url);
-                            showToast('Slides uploaded and saved successfully!', 'success');
-                            onUpload();
-                        } catch (e) {
-                            showToast('Upload succeeded but response was invalid.', 'warning');
-                        }
-                    } else {
-                        try {
-                            const errorResponse = typeof xhrResponse === 'string' ? JSON.parse(xhrResponse) : {};
-                            showToast(`Upload failed: ${errorResponse.message || 'Unknown error'}`, 'error');
-                        } catch (e) {
-                            showToast(`Upload failed.`, 'error');
-                        }
-                    }
-                    setIsUploading(false);
-                    return 100;
-                }
-
-                return Math.min(nextProgress, ceiling);
-            });
-        }, 100);
-
-        xhr.upload.addEventListener('progress', (e) => {
-            if (e.lengthComputable) {
-                actualProgress = Math.round((e.loaded / e.total) * 100);
-            }
+        addTask({
+            type: 'upload',
+            contentType: 'slide',
+            title: title,
+            file: file,
+            lessonId: lessonId,
+            folder: cleanFolder
         });
 
-        xhr.addEventListener('load', () => {
-            isXhrDone = true;
-            xhrStatus = xhr.status;
-            xhrResponse = xhr.responseText;
-            actualProgress = 100;
-        });
-
-        xhr.addEventListener('error', () => {
-            clearInterval(progressInterval);
-            showToast('Network error during upload.', 'error');
-            setIsUploading(false);
-        });
-
-        xhr.open('POST', '/api/upload');
-        xhr.send(formData);
+        showToast('Slides upload started in background', 'info');
+        onUpload();
     };
 
     const handleSaveLink = async () => {
@@ -836,70 +761,31 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
 
                     {activeTab === 'upload' && (
                         <div className="space-y-6 animate-fade-in">
-                            {!uploadedUrl ? (
-                                <>
-                                    <div className="mt-1 flex items-center justify-center px-6 pt-10 pb-10 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                                        <div className="space-y-2 text-center">
-                                            <UploadCloudIcon className="mx-auto h-12 w-12 text-gray-400" />
-                                            <div className="flex text-sm text-gray-600 dark:text-gray-400 justify-center">
-                                                <label htmlFor="slideFile" className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
-                                                    <span>Select Slide PDF</span>
-                                                    <input id="slideFile" name="slideFile" type="file" className="sr-only" onChange={handleFileChange} accept=".pdf" />
-                                                </label>
-                                            </div>
-                                            <p className="text-xs text-gray-500 dark:text-gray-500">{file ? file.name : 'PDF up to 10MB'}</p>
+                            <>
+                                <div className="mt-1 flex items-center justify-center px-6 pt-10 pb-10 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                    <div className="space-y-2 text-center">
+                                        <UploadCloudIcon className="mx-auto h-12 w-12 text-gray-400" />
+                                        <div className="flex text-sm text-gray-600 dark:text-gray-400 justify-center">
+                                            <label htmlFor="slideFile" className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
+                                                <span>Select Slide PDF</span>
+                                                <input id="slideFile" name="slideFile" type="file" className="sr-only" onChange={handleFileChange} accept=".pdf" />
+                                            </label>
                                         </div>
+                                        <p className="text-xs text-gray-500 dark:text-gray-500">{file ? file.name : 'PDF up to 10MB'}</p>
                                     </div>
-
-                                    {file && (
-                                        <div className="space-y-4">
-                                            {isUploading ? (
-                                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden relative">
-                                                    <div
-                                                        className={`h-4 rounded-full transition-all duration-300 relative overflow-hidden ${uploadProgress === 100 ? 'bg-green-500' : 'bg-blue-600'}`}
-                                                        style={{ width: `${uploadProgress === 100 ? 100 : uploadProgress}%` }}
-                                                    >
-                                                        <div className="absolute inset-0 bg-white/30 animate-[shimmer_2s_infinite]"></div>
-                                                    </div>
-                                                    <div className="text-center mt-2 flex items-center justify-center gap-2">
-                                                        {uploadProgress === 100 ? (
-                                                            <>
-                                                                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                                                                <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">Processing on Server (Please wait)...</p>
-                                                            </>
-                                                        ) : (
-                                                            <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">{uploadProgress}% Uploading...</p>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <button
-                                                    onClick={handleUploadToCloud}
-                                                    className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all"
-                                                >
-                                                    Upload & Save
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
-                                </>
-                            ) : (
-                                <div className="text-center space-y-4 py-6 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                                    <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 dark:bg-green-900">
-                                        {/* Success Icon */}
-                                        <svg className="h-6 w-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </div>
-                                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">Upload Complete!</h3>
-                                    <button
-                                        onClick={onUpload}
-                                        className="mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors"
-                                    >
-                                        Done & View Slides
-                                    </button>
                                 </div>
-                            )}
+
+                                {file && (
+                                    <div className="space-y-4">
+                                        <button
+                                            onClick={handleUploadToCloud}
+                                            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all"
+                                        >
+                                            Upload in Background
+                                        </button>
+                                    </div>
+                                )}
+                            </>
                         </div>
                     )}
 
@@ -932,7 +818,7 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
 
 export const SlideView: React.FC<SlideViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
-    const { triggerContentUpdate } = useContentUpdate();
+    const { triggerContentUpdate, updateVersion } = useContentUpdate();
 
     useEffect(() => {
         console.log('[SlideView] LessonId changed:', lessonId);
@@ -940,12 +826,10 @@ export const SlideView: React.FC<SlideViewProps> = ({ lessonId, user }) => {
 
     const { data: groupedContent, isLoading } = useApi(
         () => api.getContentsByLessonId(lessonId, ['slide'], (user.role !== 'admin' && !user.canEdit)),
-        [lessonId, version, user]
+        [lessonId, version, user, updateVersion]
     );
 
     const [stats, setStats] = useState<{ count: number } | null>(null);
-
-
 
     useEffect(() => {
         console.log('[SlideView] Content loaded:', groupedContent);
@@ -990,16 +874,6 @@ export const SlideView: React.FC<SlideViewProps> = ({ lessonId, user }) => {
             )}
 
             <div className="flex-1 overflow-hidden flex flex-col p-0 sm:p-6 lg:p-8 min-h-0">
-                {/* <div className="hidden sm:flex justify-between items-center mb-6 shrink-0">
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-3">
-                            <SlideIcon className="w-8 h-8 text-orange-500" />
-                            <h1 className="text-lg sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-orange-500 dark:from-white dark:to-orange-400">Slides</h1>
-                        </div>
-
-                    </div>
-                </div> */}
-
                 <div className="flex-1 p-0 overflow-hidden min-h-0 flex flex-col">
                     {isLoading && <div className="text-center py-10">Loading slides...</div>}
 

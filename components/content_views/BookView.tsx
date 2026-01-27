@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useBackgroundTask } from '../../context/BackgroundTaskContext'; // Added
 import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
@@ -136,11 +137,9 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
     const [file, setFile] = useState<File | null>(null);
     const [title, setTitle] = useState('');
     const [folderPath, setFolderPath] = useState('');
-    const [uploadProgress, setUploadProgress] = useState(0);
-    const [isUploading, setIsUploading] = useState(false); // Cloudinary upload state
-    const [uploadedUrl, setUploadedUrl] = useState<string | null>(null); // Cloudinary URL after upload
     const [isSaving, setIsSaving] = useState(false); // MongoDB save state
     const [linkUrl, setLinkUrl] = useState(''); // For Link tab
+    const { addTask } = useBackgroundTask(); // Added
 
     const { showToast } = useToast();
     const [isMobile, setIsMobile] = React.useState(false);
@@ -208,8 +207,6 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
         if (selectedFile) {
             if (selectedFile.type === "application/pdf") {
                 setFile(selectedFile);
-                setUploadedUrl(null); // Reset upload state on new file
-                setUploadProgress(0);
             } else {
                 showToast("Please select a valid PDF file.", 'error');
                 setFile(null);
@@ -217,101 +214,24 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
         }
     };
 
-    // Step 1: Upload to Cloudinary with Smoother Progress
+    // Step 1: Upload to Background Queue
     const handleUploadToCloud = async () => {
         if (!file || !lessonId) return;
 
-        setIsUploading(true);
-        setUploadProgress(0);
-        setUploadedUrl(null);
-
-        // Refs for tracking actual state to decouple from React renders
-        let actualProgress = 0;
-        let isXhrDone = false;
-        let xhrResponse: any = null;
-        let xhrStatus = 0;
-
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('lessonId', lessonId);
-        formData.append('type', 'book');
-        formData.append('title', title);
-
         let cleanFolder = folderPath.replace(/^(\.\.\/)?uploads\//, '');
-        formData.append('folder', cleanFolder);
 
-        const xhr = new XMLHttpRequest();
-
-        // Animation Loop
-        const progressInterval = setInterval(() => {
-            setUploadProgress(prev => {
-                // If we are significantly behind actual progress, catch up smoothly
-                // but if actual is 100, we still want to move incrementally
-                let step = 5;
-
-                // If actual is completed, we can accelerate slightly but still keep it visible
-                if (isXhrDone) step = 10;
-
-                const nextProgress = prev + step;
-
-                // Don't exceed actual progress (unless actual is smaller, which shouldn't happen usually)
-                // But for "fast" uploads, actual jumps to 100. So we effectively animate to 100.
-                const ceiling = isXhrDone ? 100 : (actualProgress > 0 ? actualProgress : 5); // Fake at least 5% start
-
-                if (nextProgress >= 100 && isXhrDone) {
-                    clearInterval(progressInterval);
-
-                    // Finalize upload (Success or Fail)
-                    if (xhrStatus >= 200 && xhrStatus < 300) {
-                        try {
-                            const result = typeof xhrResponse === 'string' ? JSON.parse(xhrResponse) : xhrResponse;
-                            const url = result.file?.url || result.secure_url || result.url;
-                            setUploadedUrl(url);
-                            showToast('Book uploaded and saved successfully!', 'success');
-                            onUpload();
-                        } catch (e) {
-                            showToast('Upload succeeded but response was invalid.', 'warning');
-                        }
-                    } else {
-                        try {
-                            const errorResponse = typeof xhrResponse === 'string' ? JSON.parse(xhrResponse) : {};
-                            showToast(`Upload failed: ${errorResponse.message || 'Unknown error'}`, 'error');
-                        } catch (e) {
-                            showToast(`Upload failed.`, 'error');
-                        }
-                    }
-                    setIsUploading(false);
-                    return 100;
-                }
-
-                // Cap at ceiling (which is actualProgress)
-                // If nextProgress (prev+step) > ceiling, just go to ceiling
-                return Math.min(nextProgress, ceiling);
-            });
-        }, 100); // Update every 100ms ~ 10fps for smooth enough look
-
-        xhr.upload.addEventListener('progress', (e) => {
-            if (e.lengthComputable) {
-                // Just update the target, don't set state directly
-                actualProgress = Math.round((e.loaded / e.total) * 100);
-            }
+        addTask({
+            type: 'upload',
+            contentType: 'book',
+            title: title,
+            file: file,
+            lessonId: lessonId,
+            folder: cleanFolder,
+            mimeType: file.type
         });
 
-        xhr.addEventListener('load', () => {
-            isXhrDone = true;
-            xhrStatus = xhr.status;
-            xhrResponse = xhr.responseText;
-            actualProgress = 100; // Ensure target is 100
-        });
-
-        xhr.addEventListener('error', () => {
-            clearInterval(progressInterval);
-            showToast('Network error during upload.', 'error');
-            setIsUploading(false);
-        });
-
-        xhr.open('POST', '/api/upload');
-        xhr.send(formData);
+        showToast('Book upload started in background', 'info');
+        onUpload();
     };
 
     // Handle Save for the Link Tab
@@ -376,82 +296,33 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
 
                     {activeTab === 'upload' && (
                         <div className="space-y-6 animate-fade-in">
-                            {!uploadedUrl ? (
-                                <>
-                                    {/* File Input */}
-                                    <div className="mt-1 flex items-center justify-center px-6 pt-10 pb-10 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                                        <div className="space-y-2 text-center">
-                                            <UploadCloudIcon className="mx-auto h-12 w-12 text-gray-400" />
-                                            <div className="flex text-sm text-gray-600 dark:text-gray-400 justify-center">
-                                                <label htmlFor="pdfFile" className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
-                                                    <span>Select PDF File</span>
-                                                    <input id="pdfFile" name="pdfFile" type="file" className="sr-only" onChange={handleFileChange} accept=".pdf" />
-                                                </label>
-                                            </div>
-                                            <p className="text-xs text-gray-500 dark:text-gray-500">{file ? file.name : 'PDF up to 10MB'}</p>
+                            <>
+                                {/* File Input */}
+                                <div className="mt-1 flex items-center justify-center px-6 pt-10 pb-10 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                    <div className="space-y-2 text-center">
+                                        <UploadCloudIcon className="mx-auto h-12 w-12 text-gray-400" />
+                                        <div className="flex text-sm text-gray-600 dark:text-gray-400 justify-center">
+                                            <label htmlFor="pdfFile" className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
+                                                <span>Select PDF File</span>
+                                                <input id="pdfFile" name="pdfFile" type="file" className="sr-only" onChange={handleFileChange} accept=".pdf" />
+                                            </label>
                                         </div>
+                                        <p className="text-xs text-gray-500 dark:text-gray-500">{file ? file.name : 'PDF up to 10MB'}</p>
                                     </div>
-
-                                    {/* Upload Button & Progress */}
-                                    {file && (
-                                        <div className="space-y-4">
-                                            {isUploading ? (
-                                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 overflow-hidden relative">
-                                                    <div
-                                                        className={`h-4 rounded-full transition-all duration-300 relative overflow-hidden ${uploadProgress === 100 ? 'bg-green-500' : 'bg-blue-600'}`}
-                                                        style={{ width: `${uploadProgress === 100 ? 100 : uploadProgress}%` }}
-                                                    >
-                                                        <div className="absolute inset-0 bg-white/30 animate-[shimmer_2s_infinite]"></div>
-                                                    </div>
-                                                    <div className="text-center mt-2 flex items-center justify-center gap-2">
-                                                        {uploadProgress === 100 ? (
-                                                            <>
-                                                                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                                                                <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">Processing on Server (Please wait)...</p>
-                                                            </>
-                                                        ) : (
-                                                            <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">{uploadProgress}% Uploading...</p>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <button
-                                                    onClick={handleUploadToCloud}
-                                                    className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all"
-                                                >
-                                                    Upload & Save
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
-                                </>
-                            ) : (
-                                <div className="text-center space-y-4 py-6 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                                    <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 dark:bg-green-900">
-                                        <CheckCircleIcon className="h-6 w-6 text-green-600 dark:text-green-400" />
-                                    </div>
-                                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">Upload Complete!</h3>
-                                    <div className="px-4">
-                                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Cloudinary URL:</p>
-                                        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-2 rounded border border-gray-200 dark:border-gray-700">
-                                            <input
-                                                readOnly
-                                                value={uploadedUrl}
-                                                className="flex-1 text-xs text-gray-600 dark:text-gray-300 bg-transparent border-none focus:ring-0 truncate"
-                                            />
-                                            <a href={uploadedUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-500">
-                                                <LinkIcon className="w-4 h-4" />
-                                            </a>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={onUpload}
-                                        className="mt-4 px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors"
-                                    >
-                                        Done & View Book
-                                    </button>
                                 </div>
-                            )}
+
+                                {/* Upload Button */}
+                                {file && (
+                                    <div className="space-y-4">
+                                        <button
+                                            onClick={handleUploadToCloud}
+                                            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all"
+                                        >
+                                            Upload in Background
+                                        </button>
+                                    </div>
+                                )}
+                            </>
                         </div>
                     )}
 
@@ -485,11 +356,11 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
 
 export const BookView: React.FC<BookViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
-    const { triggerContentUpdate } = useContentUpdate();
+    const { triggerContentUpdate, updateVersion } = useContentUpdate(); // Added updateVersion
 
     const { data: groupedContent, isLoading } = useApi(
         () => api.getContentsByLessonId(lessonId, ['book'], (user.role !== 'admin' && !user.canEdit)),
-        [lessonId, version, user]
+        [lessonId, version, user, updateVersion]
     );
 
     const [confirmModalState, setConfirmModalState] = useState<{ isOpen: boolean; onConfirm: (() => void) | null }>({ isOpen: false, onConfirm: null });

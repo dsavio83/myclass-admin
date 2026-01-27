@@ -6,6 +6,8 @@ import { FirstTimeLogin } from './components/FirstTimeLogin';
 import { SessionProvider, useSession } from './context/SessionContext';
 import { ToastProvider } from './context/ToastContext'; // Import ToastProvider
 import { ContentUpdateProvider } from './context/ContentUpdateContext';
+import { BackgroundTaskProvider } from './context/BackgroundTaskContext';
+import { BackgroundTaskProgress } from './components/common/BackgroundTaskProgress';
 import { setupDebugKeyboardShortcuts } from './utils/navigationUtils';
 
 const AppContent: React.FC = () => {
@@ -41,7 +43,10 @@ const App: React.FC = () => {
     <SessionProvider>
       <ToastProvider> {/* Wrap AppContent with ToastProvider */}
         <ContentUpdateProvider>
-          <AppContent />
+          <BackgroundTaskProvider>
+            <AppContent />
+            <BackgroundTaskProgress />
+          </BackgroundTaskProvider>
         </ContentUpdateProvider>
       </ToastProvider>
     </SessionProvider>

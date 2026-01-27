@@ -48,11 +48,11 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
         const result: string[] = [];
         let current = '';
         let inQuotes = false;
-        
+
         for (let i = 0; i < line.length; i++) {
             const char = line[i];
             const nextChar = line[i + 1];
-            
+
             if (char === '"' && nextChar === '"') {
                 current += '"';
                 i++; // Skip next quote
@@ -109,43 +109,140 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
         return text.includes('&quot;') || text.includes('&#39;') || text.includes('&amp;') || text.includes('&lt;') || text.includes('&gt;');
     };
 
+    // Helper to fix unescaped quotes in values for known schema {"f": "...", "b": "..."}
+    const fixUnescapedQuotes = (jsonStr: string): string => {
+        const lines = jsonStr.split('\n');
+        const fixedLines = lines.map(line => {
+            // Match lines like: "f": "Start content... end content",
+            // We capture everything between the first "f": " and the last " (before optional comma)
+
+            // Regex explanation:
+            // ^(\s*)          -> indent
+            // "([fb])"        -> key "f" or "b"
+            // \s*:\s*         -> separator
+            // "               -> opening quote of value
+            // (.*)            -> content (greedy, captures until last possible quote)
+            // "               -> closing quote of value
+            // (\s*,?)         -> optional comma and trailing space
+            // \s*$            -> end of line
+            const match = line.match(/^(\s*)"([fb])"\s*:\s*"(.*)"(\s*,?)\s*$/);
+
+            if (match) {
+                const prefix = match[1];
+                const key = match[2];
+                const content = match[3];
+                const suffix = match[4];
+
+                // Scan content and escape any unescaped quotes
+                let fixedContent = "";
+                for (let i = 0; i < content.length; i++) {
+                    const char = content[i];
+                    if (char === '"') {
+                        // Check if already escaped
+                        if (i > 0 && content[i - 1] === '\\') {
+                            fixedContent += char;
+                        } else {
+                            // Escape it
+                            fixedContent += '\\"';
+                        }
+                    } else {
+                        fixedContent += char;
+                    }
+                }
+                return `${prefix}"${key}": "${fixedContent}"${suffix}`;
+            }
+            return line;
+        });
+        return fixedLines.join('\n');
+    };
+
+    // Unified helper for cleaning and parsing
+    const robustParse = (input: string): any[] | null => {
+        // 1. Clean HTML entities and common garbage
+        let cleaned = input.trim()
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&#34;/g, '"')
+            .replace(/&#38;/g, '&')
+            .replace(/&#60;/g, '<')
+            .replace(/&#62;/g, '>')
+            .replace(/[\u201C\u201D]/g, '"')
+            .replace(/[\u2018\u2019]/g, "'")
+            .replace(/`/g, ""); // Remove backticks
+
+        const tryParse = (str: string) => {
+            try {
+                const parsed = JSON.parse(str);
+                if (Array.isArray(parsed)) return parsed;
+            } catch (e) { return null; }
+            return null;
+        };
+
+        // 2. Try direct parse
+        let result = tryParse(cleaned);
+        if (result) return result;
+
+        // 3. Try fixing unescaped quotes (Common user error)
+        const fixedQuotes = fixUnescapedQuotes(cleaned);
+        result = tryParse(fixedQuotes);
+        if (result) return result;
+
+        try {
+            // 4. Handle "Unexpected non-whitespace character" / Multiple Root Objects
+            // This happens if user pastes: {...} {...} or {...}\n{...}
+            try {
+                // If it starts with { and ends with }, and has multiple objects
+                // Try to split objects and wrap in array
+                // A simple heuristic: replace "}{" with "},{"
+                // taking into account whitespace
+                const fixed = `[${cleaned.replace(/}\s*\{/g, '},{')}]`;
+                const parsed = JSON.parse(fixed);
+                if (Array.isArray(parsed)) return parsed;
+            } catch (e2) {
+                // Ignore
+            }
+
+            // 5. Fallback: Try extracting all JSON objects using regex
+            // This is useful if there is weird garbage text around valid JSON objects
+            try {
+                const matches = cleaned.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+                if (matches && matches.length > 0) {
+                    const combined = `[${matches.join(',')}]`;
+                    const parsed = JSON.parse(combined);
+                    if (Array.isArray(parsed)) return parsed;
+                }
+            } catch (e3) {
+                // Ignore
+            }
+
+            // If we are here, everything failed.
+            // Throw the original error from the first parse attempt or a generic one
+            JSON.parse(cleaned); // rebuild error
+        } catch (e) {
+            throw e;
+        }
+    };
+
     const handleFormat = () => {
         setError(null);
-        
-        console.log('[Format] Original text:', text.substring(0, 200) + '...');
-        
-        // Replace all HTML entities for quotes - comprehensive replacement
-        const cleanedText = text.trim()
-            .replace(/&quot;/g, '"')           // Replace &quot; with "
-            .replace(/&#39;/g, "'")           // Replace &#39; with '
-            .replace(/&amp;/g, '&')           // Replace &amp; with &
-            .replace(/&lt;/g, '<')            // Replace &lt; with <
-            .replace(/&gt;/g, '>')            // Replace &gt; with >
-            .replace(/&#34;/g, '"')           // Replace &#34; with "
-            .replace(/&#38;/g, '&')           // Replace &#38; with &
-            .replace(/&#60;/g, '<')           // Replace &#60; with <
-            .replace(/&#62;/g, '>')           // Replace &#62; with >
-            .replace(/[\u201C\u201D]/g, '"')  // Replace smart quotes with "
-            .replace(/[\u2018\u2019]/g, "'"); // Replace smart single quotes with '
-        
-        console.log('[Format] Cleaned text:', cleanedText.substring(0, 200) + '...');
-        
+        console.log('[Format] Original text length:', text.length);
+
         try {
-            const parsed = JSON.parse(cleanedText);
-            if (Array.isArray(parsed)) {
+            const parsed = robustParse(text);
+            if (parsed) {
                 const formattedText = JSON.stringify(parsed, null, 2);
                 console.log('[Format] Successfully formatted JSON');
                 setText(formattedText);
-                // Show success message temporarily
-                setError(null);
-                // You could also show a success toast here if needed
                 return;
             } else {
                 setError("JSON must be an array of objects.");
             }
         } catch (e) {
             console.log('[Format] Parse error:', e.message);
-            setError(`Invalid JSON syntax after fixing entities: ${e.message}`);
+            setError(`Invalid JSON syntax: ${e.message}`);
         }
     };
 
@@ -157,56 +254,70 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
         let cards: { title: string; body: string }[] = [];
 
         if (importMode === 'csv') {
-            // Parse CSV format
             cards = parseCSV(text);
         } else {
-            // First try to parse as-is for cases where entities are already correct
             try {
-                const parsedJson = JSON.parse(text.trim());
-                
-                if (Array.isArray(parsedJson)) {
+                // Use the same robust parser
+                let parsedJson = robustParse(text);
+
+                if (parsedJson) {
+                    // Check for nested arrays (e.g. if robustParse wrapped an existing array)
+                    if (parsedJson.length > 0 && Array.isArray(parsedJson[0])) {
+                        parsedJson = parsedJson.flat();
+                    }
+
                     cards = parsedJson
-                        .filter(item => item && (item.f || item.front || item.title) && (item.b || item.back || item.body))
-                        .map(item => ({ 
-                            title: (item.f || item.front || item.title || '').trim(), 
-                            body: (item.b || item.back || item.body || '').trim() 
-                        }));
+                        .filter(item => {
+                            if (!item) return false;
+                            // Relaxed check: Accept if we can find ANY property that looks like a Question/Answer
+                            // Or if distinct 'f'/'b' keys exist.
+                            const keys = Object.keys(item).map(k => k.toLowerCase());
+                            const hasFront = item.f || item.front || item.title || item.question || item.q || keys.some(k => k.includes('question') || k === 'f' || k === 'q');
+                            const hasBack = item.b || item.back || item.body || item.answer || item.a || keys.some(k => k.includes('answer') || k === 'b' || k === 'a');
+
+                            const valid = hasFront && hasBack;
+                            return valid;
+                        })
+                        .map(item => {
+                            // Helper to find value case-insensitively
+                            const getValue = (keys: string[]) => {
+                                for (const key of keys) {
+                                    if (item[key]) return item[key];
+                                }
+                                // Search by partial key match
+                                for (const key of Object.keys(item)) {
+                                    const lower = key.toLowerCase();
+                                    if (keys.some(k => lower.includes(k) || lower === k)) return item[key];
+                                }
+                                return '';
+                            };
+
+                            return {
+                                title: (item.f || item.front || item.title || getValue(['question', 'q', 'f']) || '').trim(),
+                                body: (item.b || item.back || item.body || getValue(['answer', 'a', 'b']) || '').trim()
+                            };
+                        });
                 }
             } catch (e) {
-                // If parsing failed, fix HTML entities and try again
-                let processedText = text.trim();
-                
-                // More robust HTML entity replacement
-                processedText = processedText
-                    .replace(/&quot;/g, '"')           // Replace &quot; with "
-                    .replace(/&#39;/g, "'")           // Replace &#39; with '
-                    .replace(/&amp;/g, '&')           // Replace &amp; with &
-                    .replace(/&lt;/g, '<')            // Replace &lt; with <
-                    .replace(/&gt;/g, '>')            // Replace &gt; with >
-                    .replace(/[\u201C\u201D]/g, '"')  // Replace smart quotes with "
-                    .replace(/[\u2018\u2019]/g, "'"); // Replace smart single quotes with '
+                console.error(e);
+                // Final fallback: semicolon separated values
+                // Only try this if robust parsing completely failed
+                const lines = text.trim().replace(/`/g, "").split('\n'); // Clean backticks here too
+                const fallbackCards = lines
+                    .map(line => line.split(';'))
+                    .filter(parts => parts.length >= 2 && parts[0].trim() && parts[1].trim())
+                    .map(parts => ({
+                        title: parts[0].trim(),
+                        body: parts.slice(1).join(';').trim(),
+                    }));
 
-                try {
-                    const fixedJson = JSON.parse(processedText);
-                    
-                    if (Array.isArray(fixedJson)) {
-                        cards = fixedJson
-                            .filter(item => item && (item.f || item.front || item.title) && (item.b || item.back || item.body))
-                            .map(item => ({ 
-                                title: (item.f || item.front || item.title || '').trim(), 
-                                body: (item.b || item.back || item.body || '').trim() 
-                            }));
-                    }
-                } catch (e2) {
-                    // If JSON still fails, try semicolon format as fallback
-                    const lines = processedText.split('\n');
-                    cards = lines
-                        .map(line => line.split(';'))
-                        .filter(parts => parts.length >= 2 && parts[0].trim() && parts[1].trim())
-                        .map(parts => ({
-                            title: parts[0].trim(),
-                            body: parts.slice(1).join(';').trim(), // Join rest in case answer has semicolons
-                        }));
+                if (fallbackCards.length > 0) {
+                    cards = fallbackCards;
+                } else {
+                    // Re-throw original error to show user if fallback also failed
+                    setError(`Could not parse JSON: ${e.message}. For text mode, use "Question;Answer" per line.`);
+                    setIsSaving(false);
+                    return;
                 }
             }
         }
@@ -215,29 +326,29 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
             await onImport(cards);
             onClose();
         } else {
-            setError(importMode === 'csv' 
+            setError(importMode === 'csv'
                 ? 'Could not parse any cards from CSV. Please ensure the format is: Question,Answer'
                 : 'Could not parse any cards. Please ensure JSON is an array of objects (e.g., [{"f":"Question", "b":"Answer"}]) or use "Question;Answer" format per line.'
             );
         }
-        
+
         setIsSaving(false);
     };
-    
+
     return (
-         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center p-4">
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-3xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
                 <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-white">Import Flashcards</h2>
-                
+
                 {/* Import Mode Selection */}
                 <div className="mb-4 flex gap-2">
-                    <button 
+                    <button
                         onClick={() => setImportMode('json')}
                         className={`px-3 py-1 text-sm rounded-md ${importMode === 'json' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}
                     >
                         JSON/Text
                     </button>
-                    <button 
+                    <button
                         onClick={() => setImportMode('csv')}
                         className={`px-3 py-1 text-sm rounded-md ${importMode === 'csv' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}
                     >
@@ -287,7 +398,7 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
                     value={text}
                     rows={15}
                     onChange={e => { setText(e.target.value); setError(null); }}
-                    placeholder={importMode === 'json' 
+                    placeholder={importMode === 'json'
                         ? `[\n  {\n    "f": "What is <b>HTML</b>?",\n    "b": "HyperText Markup Language"\n  }\n]`
                         : `Question 1,Answer 1\nQuestion 2,Answer 2\nQuestion 3,Answer 3`
                     }
