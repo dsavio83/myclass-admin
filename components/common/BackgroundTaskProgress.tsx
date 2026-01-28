@@ -125,7 +125,8 @@ export const BackgroundTaskProgress: React.FC = () => {
                             className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 px-2 py-1 flex items-center gap-1"
                         >
                             <TrashIcon className="w-3 h-3" />
-                            Clear Completed
+                            Clear Finished
+
                         </button>
                     </div>
                 )}

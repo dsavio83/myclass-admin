@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useContentUpdate } from '../../context/ContentUpdateContext'; // Added
-import { useBackgroundTask } from '../../context/BackgroundTaskContext'; // Added
+import { useContentUpdate } from '../../context/ContentUpdateContext';
+import { useBackgroundTask } from '../../context/BackgroundTaskContext';
+import { useBackgroundMedia } from '../../context/BackgroundMediaContext';
 import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
@@ -17,7 +18,7 @@ interface AudioViewProps {
 }
 
 // Custom Audio Player with Visualizer
-const CustomAudioPlayer: React.FC<{ src: string; title: string }> = ({ src, title }) => {
+const CustomAudioPlayer: React.FC<{ src: string; title: string; id: string }> = ({ src, title, id }) => {
     const audioRef = useRef<HTMLAudioElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -29,32 +30,36 @@ const CustomAudioPlayer: React.FC<{ src: string; title: string }> = ({ src, titl
     const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
     const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
     const animationRef = useRef<number | null>(null);
+    const { playMedia, closeMedia, mediaState } = useBackgroundMedia();
 
     // Initialize Audio Context and Visualizer
     useEffect(() => {
         if (!src || !audioRef.current) return;
 
+        // Restore State Logic
+        if (mediaState && mediaState.id === id) {
+            const aud = audioRef.current;
+            aud.currentTime = mediaState.currentTime;
+            closeMedia(); // Close floating player
+            if (mediaState.isPlaying) {
+                aud.play().catch(e => console.warn("Audio restore autoplay failed", e));
+            }
+        }
+
         const initAudio = () => {
-            // To prevent multiple initializations or state issues
+            // ... existing initAudio logic
             if (!audioContext) {
                 try {
                     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
                     const ctx = new AudioContextClass();
                     const anal = ctx.createAnalyser();
                     anal.fftSize = 256;
-
-                    // We need to handle potential CORS issues for cross-origin audio
-                    // If the resource server doesn't support CORS, MediaElementSource might fail or be silent
                     const srcNode = ctx.createMediaElementSource(audioRef.current!);
                     srcNode.connect(anal);
                     anal.connect(ctx.destination);
-
                     setAudioContext(ctx);
                     setAnalyser(anal);
-                } catch (e) {
-                    console.error("Audio Context Init Error (likely CORS):", e);
-                    // Fallback: Player works, but visualizer might not
-                }
+                } catch (e) { console.error("Audio Context Init Error:", e); }
             } else if (audioContext.state === 'suspended') {
                 audioContext.resume();
             }
@@ -62,6 +67,7 @@ const CustomAudioPlayer: React.FC<{ src: string; title: string }> = ({ src, titl
 
         const handlePlay = () => {
             setIsPlaying(true);
+            closeMedia(); // Ensure external media stops
             initAudio();
         };
 
@@ -77,7 +83,20 @@ const CustomAudioPlayer: React.FC<{ src: string; title: string }> = ({ src, titl
         audio.addEventListener('loadedmetadata', handleLoadedMetadata);
         audio.addEventListener('ended', handleEnded);
 
+        // Cleanup: Send to background
         return () => {
+            if (audio && !audio.paused && !audio.ended && audio.currentTime > 0) {
+                playMedia({
+                    id: id,
+                    url: audio.src,
+                    title: title,
+                    type: 'audio',
+                    currentTime: audio.currentTime,
+                    duration: audio.duration,
+                    isPlaying: true
+                });
+            }
+
             audio.removeEventListener('play', handlePlay);
             audio.removeEventListener('pause', handlePause);
             audio.removeEventListener('timeupdate', handleTimeUpdate);
@@ -328,7 +347,7 @@ const SavedAudioViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
             )}
 
             {audioSrc ? (
-                <CustomAudioPlayer src={audioSrc} title={content.title} />
+                <CustomAudioPlayer src={audioSrc} title={content.title} id={content._id} />
             ) : (
                 <div className="p-4 bg-red-50 text-red-500 rounded-lg text-sm">
                     Audio source not found.

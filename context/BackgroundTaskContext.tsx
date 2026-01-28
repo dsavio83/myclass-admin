@@ -57,7 +57,7 @@ export const BackgroundTaskProvider: React.FC<{ children: ReactNode }> = ({ chil
     }, []);
 
     const clearCompleted = useCallback(() => {
-        setTasks(prev => prev.filter(t => t.status !== 'completed'));
+        setTasks(prev => prev.filter(t => t.status !== 'completed' && t.status !== 'error'));
     }, []);
 
     // Update a task's state in the array

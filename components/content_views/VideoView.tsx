@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useContentUpdate } from '../../context/ContentUpdateContext';
-import { useBackgroundTask } from '../../context/BackgroundTaskContext'; // Added
+import { useBackgroundTask } from '../../context/BackgroundTaskContext';
+import { useBackgroundMedia } from '../../context/BackgroundMediaContext'; // Added
 import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
@@ -61,6 +62,8 @@ const SavedVideoViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
     const [videoError, setVideoError] = useState<string | null>(null);
     const [videoLoading, setVideoLoading] = useState(true);
     const [videoSrc, setVideoSrc] = useState<string>('');
+    const videoRef = React.useRef<HTMLVideoElement>(null);
+    const { playMedia, closeMedia, mediaState } = useBackgroundMedia();
 
     // Enhanced video source detection with comprehensive debugging - simplified like AudioView
     const getVideoSrc = () => {
@@ -146,6 +149,46 @@ const SavedVideoViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
         setVideoLoading(isYouTubeVideo ? false : (src ? true : false));
         setVideoError(null);
     }, [content]);
+
+    // Background Media Sync Logic
+    useEffect(() => {
+        // Restore state if returning to this video
+        if (mediaState && mediaState.id === content._id && videoRef.current) {
+            console.log('[VideoView] Restoring background video session');
+            const restoreTime = mediaState.currentTime;
+
+            // We need to wait for src to be set? It is set in previous effect.
+            // But we might need to wait for metadata.
+            const vid = videoRef.current;
+            vid.currentTime = restoreTime;
+
+            // Close background player as we are now here
+            closeMedia();
+
+            // Auto play locally
+            if (mediaState.isPlaying) {
+                vid.play().catch(e => console.warn("Auto-restore play failed", e));
+            }
+        }
+
+        // Cleanup: active video to background
+        return () => {
+            const vid = videoRef.current;
+            if (vid && !vid.paused && !vid.ended && vid.currentTime > 0) {
+                console.log('[VideoView] Moving video to background');
+                playMedia({
+                    id: content._id,
+                    url: vid.src || vid.currentSrc,
+                    title: content.title,
+                    type: 'video',
+                    currentTime: vid.currentTime,
+                    duration: vid.duration,
+                    isPlaying: true
+                });
+            }
+        };
+    }, [videoSrc]); // Depend on videoSrc so effect tracks the rendered video element
+
 
     // Increment view count on mount
     useEffect(() => {
@@ -264,6 +307,8 @@ const SavedVideoViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
                             onLoadStart={handleVideoLoad}
                             onCanPlay={handleVideoCanPlay}
                             onError={handleVideoError}
+                            onPlay={() => closeMedia()} // Ensure background player stops if we play here
+                            ref={videoRef}
                             style={{ display: videoLoading ? 'none' : 'block' }}
                         >
                             Your browser does not support the video element.

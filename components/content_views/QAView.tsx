@@ -4,7 +4,7 @@ import { RichTextEditor } from '../common/RichTextEditor';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
 import { QAIcon } from '../icons/ResourceTypeIcons';
-import { PlusIcon, EditIcon, TrashIcon, ChevronRightIcon, DownloadIcon, XIcon, EyeIcon, UploadCloudIcon } from '../icons/AdminIcons';
+import { PlusIcon, EditIcon, TrashIcon, ChevronRightIcon, DownloadIcon, XIcon, EyeIcon, UploadCloudIcon, CollectionIcon } from '../icons/AdminIcons';
 import { PublishToggle } from '../common/PublishToggle';
 import { UnpublishedContentMessage } from '../common/UnpublishedContentMessage';
 import { ConfirmModal } from '../ConfirmModal';
@@ -14,6 +14,8 @@ import { useToast } from '../../context/ToastContext';
 import { FontSizeControl } from '../FontSizeControl';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+
+import { ManageQAModal } from './ManageQAModal';
 
 import {
     processContentForHTML
@@ -312,11 +314,11 @@ const QAImportModal: React.FC<{
         // Ensure Questions start on new line
         let processedText = text
             // Handle "Question 1 :", "Q1 :", "கேள்வி 1 :", "வினா 1 :" (allowing space before delimiter)
-            .replace(/([^\n])\s*((?:Q|Question|கேள்வி|வினா)\s*\d*\s*[\.\)\:])/gi, '$1\n$2')
+            .replace(/([^\n])\s*((?:Q|Question|கேள்வி|வினா|கே|வி)\s*\d*\s*[\.\)\:])/gi, '$1\n$2')
             // Handle plain numbers "1 :", "1 )" if they look like start of question
             .replace(/([^\n])\s+(\d+\s*[\.\)\:])/g, '$1\n$2')
             // Handle Answers "Ans :", "Answer :", "பதில் :", "விடை :"
-            .replace(/([^\n])\s*((?:A|Ans|Answer|பதில்|விடை)\s*[\.\)\:])/gi, '$1\n$2');
+            .replace(/([^\n])\s*((?:A|Ans|Answer|பதில்|விடை|வி)\s*[\.\)\:])/gi, '$1\n$2');
 
         const items: ParsedQA[] = [];
         const lines = processedText.split('\n');
@@ -684,6 +686,7 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
     const [openCardId, setOpenCardId] = useState<string | null>(null);
     const [stats, setStats] = useState<{ downloads: number } | null>(null);
     const [importModalOpen, setImportModalOpen] = useState(false);
+    const [manageModalOpen, setManageModalOpen] = useState(false);
 
     // Export state
     const [exportModalOpen, setExportModalOpen] = useState(false);
@@ -771,6 +774,19 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
         } catch (e) {
             console.error(e);
             showToast('Failed to import Q&A items', 'error');
+            throw e;
+        }
+    };
+
+    const handleBulkDelete = async (ids: string[]) => {
+        try {
+            const result = await api.deleteMultipleContent(ids);
+            showToast(result.message, 'success');
+            setVersion(v => v + 1);
+            triggerContentUpdate(); // Update sidebar counts
+        } catch (e) {
+            console.error("Bulk delete failed", e);
+            showToast('Failed to delete selected items', 'error');
             throw e;
         }
     };
@@ -997,6 +1013,14 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
                                     <span className="hidden sm:inline">Import</span>
                                 </button>
                                 <button
+                                    onClick={() => setManageModalOpen(true)}
+                                    className="flex items-center gap-2 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors shadow-sm"
+                                    title="Manage Q&A"
+                                >
+                                    <CollectionIcon className="w-5 h-5" />
+                                    <span className="hidden sm:inline">Manage</span>
+                                </button>
+                                <button
                                     onClick={() => setModalState({ isOpen: true, content: null })}
                                     className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
                                 >
@@ -1050,6 +1074,13 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
                 isOpen={importModalOpen}
                 onClose={() => setImportModalOpen(false)}
                 onImport={handleBulkImport}
+            />
+
+            <ManageQAModal
+                isOpen={manageModalOpen}
+                onClose={() => setManageModalOpen(false)}
+                currentQA={qaItems}
+                onDelete={handleBulkDelete}
             />
 
             <ConfirmModal

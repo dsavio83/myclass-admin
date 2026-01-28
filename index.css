@@ -1212,3 +1212,19 @@
   margin: 0 !important;
   /* Remove paragraph margins inside cells to keep it compact */
 }
+/* Floating Player Animation */
+.animate-slide-up {
+  animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+

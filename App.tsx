@@ -8,6 +8,8 @@ import { ToastProvider } from './context/ToastContext'; // Import ToastProvider
 import { ContentUpdateProvider } from './context/ContentUpdateContext';
 import { BackgroundTaskProvider } from './context/BackgroundTaskContext';
 import { BackgroundTaskProgress } from './components/common/BackgroundTaskProgress';
+import { BackgroundMediaProvider } from './context/BackgroundMediaContext';
+import { BackgroundMediaPlayer } from './components/common/BackgroundMediaPlayer';
 import { setupDebugKeyboardShortcuts } from './utils/navigationUtils';
 
 const AppContent: React.FC = () => {
@@ -44,8 +46,11 @@ const App: React.FC = () => {
       <ToastProvider> {/* Wrap AppContent with ToastProvider */}
         <ContentUpdateProvider>
           <BackgroundTaskProvider>
-            <AppContent />
-            <BackgroundTaskProgress />
+            <BackgroundMediaProvider>
+              <AppContent />
+              <BackgroundTaskProgress />
+              <BackgroundMediaPlayer />
+            </BackgroundMediaProvider>
           </BackgroundTaskProvider>
         </ContentUpdateProvider>
       </ToastProvider>
