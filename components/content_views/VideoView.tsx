@@ -152,39 +152,45 @@ const SavedVideoViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
 
     // Background Media Sync Logic
     useEffect(() => {
+        const videoEl = videoRef.current;
+
         // Restore state if returning to this video
-        if (mediaState && mediaState.id === content._id && videoRef.current) {
+        if (mediaState && mediaState.id === content._id && videoEl) {
             console.log('[VideoView] Restoring background video session');
             const restoreTime = mediaState.currentTime;
 
-            // We need to wait for src to be set? It is set in previous effect.
-            // But we might need to wait for metadata.
-            const vid = videoRef.current;
-            vid.currentTime = restoreTime;
+            videoEl.currentTime = restoreTime;
 
             // Close background player as we are now here
             closeMedia();
 
             // Auto play locally
             if (mediaState.isPlaying) {
-                vid.play().catch(e => console.warn("Auto-restore play failed", e));
+                videoEl.play().catch(e => console.warn("Auto-restore play failed", e));
             }
         }
 
         // Cleanup: active video to background
         return () => {
-            const vid = videoRef.current;
+            // Use the captured variable to ensure we have the element even if ref is cleared
+            const vid = videoEl;
+
+            // Check if local video is playing and valid
             if (vid && !vid.paused && !vid.ended && vid.currentTime > 0) {
-                console.log('[VideoView] Moving video to background');
-                playMedia({
-                    id: content._id,
-                    url: vid.src || vid.currentSrc,
-                    title: content.title,
-                    type: 'video',
-                    currentTime: vid.currentTime,
-                    duration: vid.duration,
-                    isPlaying: true
-                });
+                // Ensure we have a valid URL
+                const currentUrl = vid.src || vid.currentSrc;
+                if (currentUrl) {
+                    console.log('[VideoView] Moving video to background', { time: vid.currentTime, url: currentUrl });
+                    playMedia({
+                        id: content._id,
+                        url: currentUrl,
+                        title: content.title,
+                        type: 'video',
+                        currentTime: vid.currentTime,
+                        duration: vid.duration,
+                        isPlaying: true
+                    });
+                }
             }
         };
     }, [videoSrc]); // Depend on videoSrc so effect tracks the rendered video element

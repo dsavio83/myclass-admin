@@ -67,6 +67,7 @@ export const BackgroundMediaPlayer: React.FC = () => {
                             onTimeUpdate={handleTimeUpdate}
                             onPlay={handlePlay}
                             onPause={handlePause}
+                            autoPlay
                         />
                     )
                 ) : (

@@ -16,6 +16,10 @@ export const UploadContent: React.FC<UploadContentProps> = ({
 }) => {
   const [uploadMode, setUploadMode] = useState<'file' | 'url'>('file');
   const [urlInput, setUrlInput] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [title, setTitle] = useState('');
+  const [dragActive, setDragActive] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Cache for file type validation and operations
   const fileValidationCache = useRef({

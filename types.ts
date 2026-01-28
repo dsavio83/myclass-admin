@@ -15,6 +15,7 @@ export interface User {
   isFirstLogin: boolean;
   canEdit?: boolean; // New property for granular edit permissions
   requestRole?: string | null;
+  teacherRequestStatus?: 'pending' | 'approved' | 'rejected' | null;
   district?: string;
   subDistrict?: string;
   school?: string;
