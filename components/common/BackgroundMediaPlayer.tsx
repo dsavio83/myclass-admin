@@ -53,7 +53,7 @@ export const BackgroundMediaPlayer: React.FC = () => {
                 {mediaState.type === 'video' ? (
                     isYouTube ? (
                         <iframe
-                            src={`${mediaState.url}?autoplay=1&start=${Math.floor(mediaState.currentTime)}`}
+                            src={`${mediaState.url}${mediaState.url.includes('?') ? '&' : '?'}autoplay=1&start=${Math.floor(mediaState.currentTime)}`}
                             className="w-full h-full"
                             title={mediaState.title}
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

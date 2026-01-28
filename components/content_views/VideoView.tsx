@@ -155,19 +155,21 @@ const SavedVideoViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
         const videoEl = videoRef.current;
 
         // Restore state if returning to this video
-        if (mediaState && mediaState.id === content._id && videoEl) {
-            console.log('[VideoView] Restoring background video session');
-            const restoreTime = mediaState.currentTime;
+        if (mediaState && mediaState.id === content._id) {
+            console.log('[VideoView] Restoring/Closing background session');
 
-            videoEl.currentTime = restoreTime;
+            // Handle local video restoration
+            if (videoEl) {
+                const restoreTime = mediaState.currentTime;
+                videoEl.currentTime = restoreTime;
 
-            // Close background player as we are now here
-            closeMedia();
-
-            // Auto play locally
-            if (mediaState.isPlaying) {
-                videoEl.play().catch(e => console.warn("Auto-restore play failed", e));
+                if (mediaState.isPlaying) {
+                    videoEl.play().catch(e => console.warn("Auto-restore play failed", e));
+                }
             }
+
+            // Always close background player as we are now here (applies to both local and YouTube)
+            closeMedia();
         }
 
         // Cleanup: active video to background
@@ -191,6 +193,18 @@ const SavedVideoViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
                         isPlaying: true
                     });
                 }
+            } else if (!vid && videoSrc && videoSrc.includes('youtube.com/embed/')) {
+                // YouTube handling (Limitation: Cannot track play state/time without API, assuming active)
+                console.log('[VideoView] Moving YouTube video to background');
+                playMedia({
+                    id: content._id,
+                    url: videoSrc,
+                    title: content.title,
+                    type: 'video',
+                    currentTime: 0, // Reset to start as we can't track iframe time
+                    duration: 0,
+                    isPlaying: true
+                });
             }
         };
     }, [videoSrc]); // Depend on videoSrc so effect tracks the rendered video element
