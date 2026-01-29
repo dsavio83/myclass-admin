@@ -123,16 +123,24 @@ export const AdminView: React.FC = () => {
     }, [updateStateAndResetScroll, isMobile]);
 
     const handleSelectResourceType = useCallback((resourceType: ResourceType) => {
-        updateStateAndResetScroll({ selectedResourceType: resourceType });
+        if (state.activePage === 'below-average' && resourceType !== 'below_average') {
+            updateStateAndResetScroll({ activePage: 'browser', selectedResourceType: resourceType });
+        } else {
+            updateStateAndResetScroll({ selectedResourceType: resourceType });
+        }
         // Auto-hide regular sidebar on mobile when menu item is selected, but keep admin sidebar open
         if (isMobile) {
             setSidebarOpen(false);
             // Keep admin sidebar open for better UX
         }
-    }, [updateStateAndResetScroll, isMobile]);
+    }, [updateStateAndResetScroll, isMobile, state.activePage]);
 
     const handleSetActivePage = useCallback((page: string) => {
-        updateStateAndResetScroll({ activePage: page });
+        if (page === 'below-average') {
+            updateStateAndResetScroll({ activePage: page, selectedResourceType: 'below_average' });
+        } else {
+            updateStateAndResetScroll({ activePage: page });
+        }
         // Auto-hide regular sidebar on mobile when page changes, but keep admin sidebar open
         if (isMobile) {
             setSidebarOpen(false);
@@ -181,11 +189,18 @@ export const AdminView: React.FC = () => {
                             onlyPublished={user.role !== 'admin' && !user.canEdit}
                         />
                         <div className="flex-1 overflow-hidden">
-                            <ContentDisplay
-                                lessonId={state.lessonId}
-                                selectedResourceType={state.selectedResourceType}
-                                user={user}
-                            />
+                            {state.selectedResourceType === 'below_average' ? (
+                                <BelowAveragePage
+                                    lessonId={state.lessonId}
+                                    user={user}
+                                />
+                            ) : (
+                                <ContentDisplay
+                                    lessonId={state.lessonId}
+                                    selectedResourceType={state.selectedResourceType}
+                                    user={user}
+                                />
+                            )}
                         </div>
                     </div>
                 );
@@ -244,7 +259,7 @@ export const AdminView: React.FC = () => {
             />
             <SelectionRestorationIndicator />
             <div className="flex flex-1 overflow-hidden">
-                {state.activePage === 'browser' && (
+                {(state.activePage === 'browser' || state.activePage === 'below-average') && (
                     <Sidebar
                         lessonId={state.lessonId}
                         selectedResourceType={state.selectedResourceType}
