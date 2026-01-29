@@ -26,6 +26,7 @@ const RESOURCE_COLORS: Record<ResourceType, string> = {
   audio: 'bg-gradient-to-br from-purple-600 to-purple-500 text-white shadow-md',
   worksheet: 'bg-gradient-to-br from-green-600 to-green-500 text-white shadow-md',
   questionPaper: 'bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow-md',
+  below_average: 'bg-gradient-to-br from-teal-600 to-teal-500 text-white shadow-md',
 };
 
 // Explicit badge background colors to ensure consistent "darker" shade matches the button
@@ -41,6 +42,7 @@ const BADGE_BG_COLORS: Record<ResourceType, string> = {
   audio: 'bg-purple-600',
   worksheet: 'bg-green-600',
   questionPaper: 'bg-indigo-600',
+  below_average: 'bg-teal-600',
 };
 
 export const ResourceIconStrip: React.FC<ResourceIconStripProps> = ({

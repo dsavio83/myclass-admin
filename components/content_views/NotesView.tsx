@@ -15,6 +15,8 @@ import { useToast } from '../../context/ToastContext';
 import { useSession } from '../../context/SessionContext';
 import { FontSizeControl } from '../FontSizeControl';
 import { processContentForHTML } from '../../utils/htmlUtils';
+import { StandardContentPicker } from '../common/StandardContentPicker';
+import { LinkIcon } from '../icons/AdminIcons';
 
 
 declare global {
@@ -26,6 +28,7 @@ declare global {
 interface NotesViewProps {
     lessonId: string;
     user: User;
+    category?: string;
 }
 
 const ExportEmailModal: React.FC<{
@@ -95,12 +98,17 @@ const NoteCard: React.FC<{
     onDelete: (id: string) => void;
     isAdmin: boolean;
     onTogglePublish?: (item: Content) => void;
-}> = ({ item, onEdit, onDelete, isAdmin, onTogglePublish }) => {
+    isFullView?: boolean;
+}> = ({ item, onEdit, onDelete, isAdmin, onTogglePublish, isFullView }) => {
     const { session } = useSession();
     const fontStyle = { fontSize: `${session.fontSize}px` };
 
     return (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 sm:px-8 relative group">
+        <div className={
+            isFullView
+                ? "w-full max-w-none bg-transparent dark:bg-transparent p-0 mb-8 relative group border-b border-gray-200 dark:border-gray-700 pb-8 last:border-0 hover:bg-transparent shadow-none"
+                : "bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 sm:px-8 relative group"
+        }>
             <div
                 className="tau-body prose prose-sm dark:prose-invert max-w-none text-black dark:text-white break-words font-tau-paalai"
                 style={{
@@ -109,7 +117,7 @@ const NoteCard: React.FC<{
                 dangerouslySetInnerHTML={{ __html: processContentForHTML(item.body) }}
             />
             {isAdmin && (
-                <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity sm:opacity-0 md:group-hover:opacity-100">
+                <div className="absolute top-0 right-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     {onTogglePublish && (
                         <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-full shadow-sm">
                             <PublishToggle
@@ -152,10 +160,10 @@ const removeUnformattedDuplicates = (html: string): string => {
 import { useContentUpdate } from '../../context/ContentUpdateContext';
 // ... previous imports
 
-export const NotesView: React.FC<NotesViewProps> = ({ lessonId, user }) => {
+export const NotesView: React.FC<NotesViewProps> = ({ lessonId, user, category }) => {
     const [version, setVersion] = useState(0);
     const { triggerContentUpdate } = useContentUpdate();
-    const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['notes'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user]);
+    const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['notes'], (user.role !== 'admin' && !user.canEdit), category), [lessonId, version, user, category]);
     const [editingNote, setEditingNote] = useState<Content | boolean | null>(null);
     const [confirmModalState, setConfirmModalState] = useState<{ isOpen: boolean; onConfirm: (() => void) | null }>({ isOpen: false, onConfirm: null });
     const [exportModalOpen, setExportModalOpen] = useState(false);
@@ -174,6 +182,7 @@ export const NotesView: React.FC<NotesViewProps> = ({ lessonId, user }) => {
         title: '',
         message: ''
     });
+    const [pickerOpen, setPickerOpen] = useState(false);
 
     const exportContainerRef = useRef<HTMLDivElement>(null);
     const notes = groupedContent?.[0]?.docs || [];
@@ -208,7 +217,7 @@ export const NotesView: React.FC<NotesViewProps> = ({ lessonId, user }) => {
                 tempDiv.innerHTML = body;
                 const textContent = tempDiv.textContent || tempDiv.innerText || '';
                 const title = textContent.trim().substring(0, 50) || `Note - ${new Date().toLocaleDateString()}`;
-                await api.addContent({ title, body, lessonId, type: resourceType, isPublished });
+                await api.addContent({ title, body, lessonId, type: resourceType, isPublished, category: category || 'standard' });
             }
             setVersion(v => v + 1);
             triggerContentUpdate(); // Update sidebar counts
@@ -249,6 +258,36 @@ export const NotesView: React.FC<NotesViewProps> = ({ lessonId, user }) => {
 
     const handleCancelEdit = () => {
         setEditingNote(null);
+    };
+
+    const handleLinkContent = async (selectedItems: Content[]) => {
+        try {
+            await Promise.all(selectedItems.map(item => {
+                // Determine title: Use existing title or generate one
+                let title = item.title;
+                if (!title || title.trim() === '') {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = item.body || '';
+                    const textContent = tempDiv.textContent || tempDiv.innerText || '';
+                    title = textContent.trim().substring(0, 50) || `Note - ${new Date().toLocaleDateString()}`;
+                }
+
+                return api.addContent({
+                    lessonId,
+                    type: 'notes',
+                    title: title,
+                    body: item.body,
+                    isPublished: false, // Default to unpublished
+                    category: category
+                });
+            }));
+            setVersion(v => v + 1);
+            triggerContentUpdate();
+            showToast(`Successfully linked ${selectedItems.length} notes`, 'success');
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to link content', 'error');
+        }
     };
 
     // PDF Export Logic
@@ -442,10 +481,22 @@ export const NotesView: React.FC<NotesViewProps> = ({ lessonId, user }) => {
                         <FontSizeControl />
 
                         {canEdit && !editingNote && (
-                            <button onClick={() => setEditingNote(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors" title="Add New Note">
-                                <PlusIcon className="w-5 h-5" />
-                                <span className="hidden sm:inline">Add New</span>
-                            </button>
+                            <div className="flex items-center gap-2">
+                                {category === 'below_average_d_plus' && (
+                                    <button
+                                        onClick={() => setPickerOpen(true)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                                        title="Link Existing Standard Content"
+                                    >
+                                        <LinkIcon className="w-5 h-5" />
+                                        <span className="hidden sm:inline">Link Existing</span>
+                                    </button>
+                                )}
+                                <button onClick={() => setEditingNote(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors" title="Add New Note">
+                                    <PlusIcon className="w-5 h-5" />
+                                    <span className="hidden sm:inline">Add New</span>
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -465,7 +516,7 @@ export const NotesView: React.FC<NotesViewProps> = ({ lessonId, user }) => {
 
                         {!isLoading && notes.length > 0 && (
                             <div className="space-y-[30px] px-2">
-                                {notes.map(note => <NoteCard key={note._id} item={note} onEdit={setEditingNote} onDelete={handleDelete} isAdmin={canEdit} onTogglePublish={handleTogglePublish} />)}
+                                {notes.map(note => <NoteCard key={note._id} item={note} onEdit={setEditingNote} onDelete={handleDelete} isAdmin={canEdit} onTogglePublish={handleTogglePublish} isFullView={category === 'below_average_d_plus'} />)}
                             </div>
                         )}
 
@@ -485,6 +536,14 @@ export const NotesView: React.FC<NotesViewProps> = ({ lessonId, user }) => {
                     onClose={() => setExportModalOpen(false)}
                     onExport={handleExportConfirm}
                     isLoading={isExporting}
+                />
+
+                <StandardContentPicker
+                    isOpen={pickerOpen}
+                    onClose={() => setPickerOpen(false)}
+                    onImport={handleLinkContent}
+                    lessonId={lessonId}
+                    resourceType="notes"
                 />
 
                 {sweetAlert.show && (

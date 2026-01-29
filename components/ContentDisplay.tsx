@@ -18,6 +18,7 @@ interface ContentDisplayProps {
   lessonId: string | null;
   selectedResourceType: ResourceType | null;
   user: User;
+  category?: string;
 }
 
 const WelcomeMessage: React.FC<{ message: string; subMessage: string }> = ({ message, subMessage }) => (
@@ -29,7 +30,7 @@ const WelcomeMessage: React.FC<{ message: string; subMessage: string }> = ({ mes
   </div>
 );
 
-export const ContentDisplay: React.FC<ContentDisplayProps> = ({ lessonId, selectedResourceType, user }) => {
+export const ContentDisplay: React.FC<ContentDisplayProps> = ({ lessonId, selectedResourceType, user, category }) => {
   // Debug logging to track prop changes
   useEffect(() => {
     console.log('[ContentDisplay] Props changed:', { lessonId, selectedResourceType });
@@ -56,17 +57,17 @@ export const ContentDisplay: React.FC<ContentDisplayProps> = ({ lessonId, select
       case 'worksheet':
         return <WorksheetView lessonId={lessonId} user={user} />;
       case 'notes':
-        return <NotesView lessonId={lessonId} user={user} />;
+        return <NotesView lessonId={lessonId} user={user} category={category} />;
       case 'qa':
-        return <QAView lessonId={lessonId} user={user} />;
+        return <QAView lessonId={lessonId} user={user} category={category} />;
       case 'flashcard':
         return <FlashcardView lessonId={lessonId} user={user} />;
       case 'video':
-        return <VideoView lessonId={lessonId} user={user} />;
+        return <VideoView lessonId={lessonId} user={user} category={category} />;
       case 'audio':
-        return <AudioView lessonId={lessonId} user={user} />;
+        return <AudioView lessonId={lessonId} user={user} category={category} />;
       case 'quiz':
-        return <QuizView lessonId={lessonId} user={user} />;
+        return <QuizView lessonId={lessonId} user={user} category={category} />;
       case 'questionPaper':
         return <QuestionPaperView lessonId={lessonId} user={user} />;
       case 'slide':

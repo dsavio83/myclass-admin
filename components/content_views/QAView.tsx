@@ -4,7 +4,8 @@ import { RichTextEditor } from '../common/RichTextEditor';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
 import { QAIcon } from '../icons/ResourceTypeIcons';
-import { PlusIcon, EditIcon, TrashIcon, ChevronRightIcon, DownloadIcon, XIcon, EyeIcon, UploadCloudIcon, CollectionIcon } from '../icons/AdminIcons';
+import { PlusIcon, EditIcon, TrashIcon, ChevronRightIcon, DownloadIcon, XIcon, EyeIcon, UploadCloudIcon, CollectionIcon, LinkIcon } from '../icons/AdminIcons';
+import { StandardContentPicker } from '../common/StandardContentPicker';
 import { PublishToggle } from '../common/PublishToggle';
 import { UnpublishedContentMessage } from '../common/UnpublishedContentMessage';
 import { ConfirmModal } from '../ConfirmModal';
@@ -34,6 +35,7 @@ declare global {
 interface QAViewProps {
     lessonId: string;
     user: User;
+    category?: string;
 }
 
 // --- Constants & Helpers ---
@@ -678,15 +680,16 @@ const QACard: React.FC<{
     );
 };
 
-export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
+export const QAView: React.FC<QAViewProps> = ({ lessonId, user, category }) => {
     const [version, setVersion] = useState(0);
-    const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['qa'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user]);
+    const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['qa'], (user.role !== 'admin' && !user.canEdit), category), [lessonId, version, user, category]);
     const [modalState, setModalState] = useState<{ isOpen: boolean; content: Content | null }>({ isOpen: false, content: null });
     const [confirmModalState, setConfirmModalState] = useState<{ isOpen: boolean; onConfirm: (() => void) | null }>({ isOpen: false, onConfirm: null });
     const [openCardId, setOpenCardId] = useState<string | null>(null);
     const [stats, setStats] = useState<{ downloads: number } | null>(null);
     const [importModalOpen, setImportModalOpen] = useState(false);
     const [manageModalOpen, setManageModalOpen] = useState(false);
+    const [pickerOpen, setPickerOpen] = useState(false);
 
     // Export state
     const [exportModalOpen, setExportModalOpen] = useState(false);
@@ -758,7 +761,7 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
         if (modalState.content) {
             await api.updateContent(modalState.content._id, contentData);
         } else {
-            await api.addContent({ ...contentData, lessonId, type: resourceType });
+            await api.addContent({ ...contentData, lessonId, type: resourceType, category: category || 'standard' });
         }
         setVersion(v => v + 1);
         triggerContentUpdate(); // Update sidebar counts
@@ -767,7 +770,7 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
 
     const handleBulkImport = async (items: any[]) => {
         try {
-            await api.addMultipleContent(items.map(i => ({ ...i, lessonId, type: resourceType })));
+            await api.addMultipleContent(items.map(i => ({ ...i, lessonId, type: resourceType, category: category || 'standard' })));
             setVersion(v => v + 1);
             triggerContentUpdate(); // Update sidebar counts
             showToast(`Successfully imported ${items.length} Q&A items!`, 'success');
@@ -775,6 +778,30 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
             console.error(e);
             showToast('Failed to import Q&A items', 'error');
             throw e;
+        }
+    };
+
+    const handleLinkContent = async (selectedItems: Content[]) => {
+        try {
+            await Promise.all(selectedItems.map(item => {
+                const metadata = item.metadata || {};
+
+                return api.addContent({
+                    lessonId,
+                    type: 'qa',
+                    title: item.title,
+                    body: item.body,
+                    isPublished: false,
+                    category: category,
+                    metadata: metadata
+                });
+            }));
+            setVersion(v => v + 1);
+            triggerContentUpdate();
+            showToast(`Successfully linked ${selectedItems.length} Q&A items`, 'success');
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to link content', 'error');
         }
     };
 
@@ -1004,6 +1031,16 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
 
                         {canEdit && (
                             <>
+                                {category === 'below_average_d_plus' && (
+                                    <button
+                                        onClick={() => setPickerOpen(true)}
+                                        className="flex items-center gap-2 px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shadow-sm"
+                                        title="Link Existing Standard Q&A"
+                                    >
+                                        <LinkIcon className="w-5 h-5" />
+                                        <span className="hidden sm:inline">Link Existing</span>
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => setImportModalOpen(true)}
                                     className="flex items-center gap-2 px-3 py-2 bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 rounded-lg hover:bg-indigo-200 dark:hover:bg-indigo-900/50 transition-colors shadow-sm"
@@ -1089,6 +1126,14 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user }) => {
                 onConfirm={confirmModalState.onConfirm}
                 title="Delete Q&A"
                 message="Are you sure you want to delete this Q&A item?"
+            />
+
+            <StandardContentPicker
+                isOpen={pickerOpen}
+                onClose={() => setPickerOpen(false)}
+                onImport={handleLinkContent}
+                lessonId={lessonId}
+                resourceType="qa"
             />
 
             {/* SweetAlert Modal */}

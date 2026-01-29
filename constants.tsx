@@ -3,6 +3,7 @@
 import React from 'react';
 import { ResourceType } from './types';
 import { BookIcon, FlashcardIcon, NotesIcon, QAIcon, ActivityIcon, VideoIcon, AudioIcon, WorksheetIcon, QuestionPaperIcon, QuizIcon, SlideIcon } from './components/icons/ResourceTypeIcons';
+import { TargetIcon } from './components/icons/AdminIcons';
 
 interface ResourceInfo {
   key: ResourceType;
@@ -25,4 +26,5 @@ export const RESOURCE_TYPES: ResourceInfo[] = [
   { key: 'quiz', label: 'Quiz', Icon: QuizIcon, description: 'Test your knowledge with interactive quizzes.', color: 'text-rose-600', gradient: 'from-black to-rose-600 dark:from-white dark:to-rose-400' },
   { key: 'worksheet', label: 'Worksheet', Icon: WorksheetIcon, description: 'Downloadable practice sheets and assignments.', color: 'text-green-600', gradient: 'from-black to-green-600 dark:from-white dark:to-green-400' },
   { key: 'questionPaper', label: 'Question Papers', Icon: QuestionPaperIcon, description: 'Previous year and sample question papers.', color: 'text-indigo-600', gradient: 'from-black to-indigo-600 dark:from-white dark:to-indigo-400' },
+  { key: 'below_average', label: 'Below Average [D+]', Icon: TargetIcon, description: 'Special content for [D+] category.', color: 'text-teal-600', gradient: 'from-black to-teal-600 dark:from-white dark:to-teal-400' },
 ];

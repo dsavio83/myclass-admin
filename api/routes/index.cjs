@@ -527,6 +527,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
                 viewCount: 0,
                 downloadCount: 0,
                 isPublished: false,
+                category: req.body.category || 'standard',
                 metadata: {
                     hierarchyPath: uploadFolder,
                     ...hierarchy // Store full hierarchy details
@@ -630,6 +631,7 @@ router.post('/content/url', async (req, res) => {
             lessonId: new mongoose.Types.ObjectId(lessonId),
             type: type,
             title: title,
+            category: req.body.category || 'standard',
             body: '',
             filePath: url, // Store direct URL
             originalFileName: url.split('/').pop()?.split('?')[0] || 'external_link',
@@ -752,7 +754,7 @@ router.post('/content/cloudinary-save', async (req, res) => {
             size: req.body.size
         });
 
-        const { lessonId, title, type, fileUrl, publicId, size, mimeType, resourceType } = req.body;
+        const { lessonId, title, type, fileUrl, publicId, size, mimeType, resourceType, category } = req.body;
 
         // Validate required fields
         if (!lessonId || !title || !type || !fileUrl || !publicId) {
@@ -798,7 +800,9 @@ router.post('/content/cloudinary-save', async (req, res) => {
         const contentData = {
             lessonId: new mongoose.Types.ObjectId(lessonId),
             title: title.trim(),
+            title: title.trim(),
             type: type,
+            category: category || 'standard',
             storage: "cloudinary",
             file: {
                 url: fileUrl,
@@ -1992,6 +1996,24 @@ router.get('/content', async (req, res) => {
         if (type) query.type = type;
         if (onlyPublished === 'true') query.isPublished = true;
 
+        // Category filtering logic
+        if (req.query.category) {
+            if (req.query.category === 'standard') {
+                // Handle legacy content: Include 'standard' OR missing category
+                query.$or = [
+                    { category: 'standard' },
+                    { category: { $exists: false } },
+                    { category: null }
+                ];
+            } else {
+                query.category = req.query.category;
+            }
+        } else {
+            // Default: Exclude 'below_average_d_plus' content from standard views
+            // This ensures D+ content only appears when explicitly requested
+            query.category = { $ne: 'below_average_d_plus' };
+        }
+
         console.log('[API /content] Query:', query);
 
         const contents = await Content.find(query);
@@ -2105,6 +2127,22 @@ router.get('/qa/:lessonId', async (req, res) => {
         }
         if (onlyPublished === 'true') {
             query.isPublished = true;
+        }
+
+        // Category filtering
+        if (req.query.category) {
+            if (req.query.category === 'standard') {
+                // Handle legacy content
+                query.$or = [
+                    { category: 'standard' },
+                    { category: { $exists: false } },
+                    { category: null }
+                ];
+            } else {
+                query.category = req.query.category;
+            }
+        } else {
+            query.category = { $ne: 'below_average_d_plus' };
         }
 
         // Build options
@@ -2269,10 +2307,11 @@ router.post('/content', async (req, res) => {
         });
 
         const newContent = new Content(contentData);
+        console.log('[API POST /content] New Content Instance Category:', newContent.category);
+        console.log('[API POST /content] Request Body Category:', req.body.category);
         await newContent.save();
 
-
-        console.log('[API] Content saved successfully:', newContent._id);
+        console.log('[API] Content saved successfully:', newContent._id, 'Category:', newContent.category);
         res.status(201).json(newContent);
     } catch (error) {
         console.error('[API] Content creation error:', error);

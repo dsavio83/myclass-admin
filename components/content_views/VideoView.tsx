@@ -6,7 +6,8 @@ import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
 import { VideoIcon } from '../icons/ResourceTypeIcons';
-import { TrashIcon, UploadCloudIcon, PlusIcon, EyeIcon } from '../icons/AdminIcons';
+import { TrashIcon, UploadCloudIcon, PlusIcon, EyeIcon, LinkIcon } from '../icons/AdminIcons';
+import { StandardContentPicker } from '../common/StandardContentPicker';
 import { PublishToggle } from '../common/PublishToggle';
 import { UnpublishedContentMessage } from '../common/UnpublishedContentMessage';
 import { ConfirmModal } from '../ConfirmModal';
@@ -17,6 +18,7 @@ import { ContentStatusBanner } from '../common/ContentStatusBanner';
 interface VideoViewProps {
     lessonId: string;
     user: User;
+    category?: string;
 }
 
 // ... (getYouTubeEmbedUrl and SavedVideoViewer remain same)
@@ -397,7 +399,7 @@ const SavedVideoViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
     );
 };
 
-const AddVideoForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd: () => void; onCancel: () => void; }> = ({ lessonId, existingTitles, onAdd, onCancel }) => {
+const AddVideoForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd: () => void; onCancel: () => void; category?: string; }> = ({ lessonId, existingTitles, onAdd, onCancel, category }) => {
     const [activeTab, setActiveTab] = useState<'upload' | 'youtube'>('upload');
     const [title, setTitle] = useState('');
     const [folderPath, setFolderPath] = useState('');
@@ -491,7 +493,8 @@ const AddVideoForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd
             title: title,
             file: file,
             lessonId: lessonId,
-            mimeType: file.type
+            mimeType: file.type,
+            category: category // Pass category to background task
         });
 
         showToast('Video upload started in background', 'info');
@@ -515,6 +518,7 @@ const AddVideoForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd
                 body: url,
                 lessonId,
                 type: 'video',
+                category: category || 'standard',
                 metadata: {
                     category: 'External',
                     subCategory: 'YouTube',
@@ -660,12 +664,13 @@ const AddVideoForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd
     );
 };
 
-export const VideoView: React.FC<VideoViewProps> = ({ lessonId, user }) => {
+export const VideoView: React.FC<VideoViewProps> = ({ lessonId, user, category }) => {
     const [version, setVersion] = useState(0);
     const { triggerContentUpdate, updateVersion } = useContentUpdate();
-    const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['video'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user, updateVersion]);
+    const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['video'], (user.role !== 'admin' && !user.canEdit), category), [lessonId, version, user, updateVersion, category]);
     const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; onConfirm: (() => void) | null; }>({ isOpen: false, onConfirm: null, });
     const [showAddForm, setShowAddForm] = useState(false);
+    const [pickerOpen, setPickerOpen] = useState(false);
     const [stats, setStats] = useState<{ count: number } | null>(null);
     const { showToast } = useToast();
 
@@ -713,6 +718,38 @@ export const VideoView: React.FC<VideoViewProps> = ({ lessonId, user }) => {
         setShowAddForm(false);
     };
 
+    const handleLinkContent = async (selectedItems: Content[]) => {
+        try {
+            await Promise.all(selectedItems.map(item => {
+                // Determine title: Ensure uniqueness or use existing
+                const title = item.title;
+
+                // For video, we need to pass the file object for Cloudinary or filePath for local
+                // addContent logic handles this intelligently usually, but let's be explicit
+                // Use metadata if available to preserve detailed info
+                const metadata = item.metadata || {};
+
+                return api.addContent({
+                    lessonId,
+                    type: 'video',
+                    title: title,
+                    body: item.body, // Contains URL for YouTube or external
+                    isPublished: false, // Default to unpublished
+                    category: category,
+                    filePath: item.filePath, // Use existing path
+                    file: item.file, // Use existing file object if present
+                    metadata: metadata
+                });
+            }));
+            setVersion(v => v + 1);
+            triggerContentUpdate();
+            showToast(`Successfully linked ${selectedItems.length} videos`, 'success');
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to link content', 'error');
+        }
+    };
+
     return (
         <div className="h-full flex flex-col overflow-hidden">
             {canEdit && videoContents.length > 0 && (
@@ -734,14 +771,26 @@ export const VideoView: React.FC<VideoViewProps> = ({ lessonId, user }) => {
                     </div>
 
                     {canEdit && !showAddForm && (
-                        <button
-                            onClick={() => setShowAddForm(true)}
-                            className="flex items-center justify-center p-2.5 w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors sm:px-4 sm:w-auto sm:h-auto"
-                            title="Add New Video"
-                        >
-                            <PlusIcon className="w-5 h-5" />
-                            <span className="hidden sm:inline sm:ml-2">Add New</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {category === 'below_average_d_plus' && (
+                                <button
+                                    onClick={() => setPickerOpen(true)}
+                                    className="flex items-center justify-center p-2.5 w-10 h-10 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors sm:px-4 sm:w-auto sm:h-auto"
+                                    title="Link Existing Standard Content"
+                                >
+                                    <LinkIcon className="w-5 h-5" />
+                                    <span className="hidden sm:inline sm:ml-2">Link Existing</span>
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setShowAddForm(true)}
+                                className="flex items-center justify-center p-2.5 w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors sm:px-4 sm:w-auto sm:h-auto"
+                                title="Add New Video"
+                            >
+                                <PlusIcon className="w-5 h-5" />
+                                <span className="hidden sm:inline sm:ml-2">Add New</span>
+                            </button>
+                        </div>
                     )}
                 </div>
 
@@ -754,6 +803,7 @@ export const VideoView: React.FC<VideoViewProps> = ({ lessonId, user }) => {
                             existingTitles={videoContents.map(v => v.title)}
                             onAdd={handleAddSuccess}
                             onCancel={() => setShowAddForm(false)}
+                            category={category}
                         />
                     )}
 
@@ -793,6 +843,14 @@ export const VideoView: React.FC<VideoViewProps> = ({ lessonId, user }) => {
                     onConfirm={confirmModal.onConfirm}
                     title="Remove Video"
                     message="Are you sure you want to remove this video?"
+                />
+
+                <StandardContentPicker
+                    isOpen={pickerOpen}
+                    onClose={() => setPickerOpen(false)}
+                    onImport={handleLinkContent}
+                    lessonId={lessonId}
+                    resourceType="video"
                 />
             </div>
         </div>

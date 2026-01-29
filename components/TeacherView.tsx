@@ -9,6 +9,7 @@ import { useSession } from '../context/SessionContext';
 import { TeacherState } from '../types';
 import { useScrollPersistence } from '../hooks/useScrollPersistence';
 import { SelectionRestorationIndicator } from './SelectionRestorationIndicator';
+import { BelowAveragePage } from './BelowAveragePage';
 
 export const TeacherView: React.FC = () => {
     const { session, logout, updateTeacherState } = useSession();
@@ -98,12 +99,19 @@ export const TeacherView: React.FC = () => {
         <div className="flex flex-col h-screen overflow-hidden">
             <Header user={user} onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} onLogout={logout} onProfile={handleProfile} />
             <SelectionRestorationIndicator />
-            <div className="flex flex-1 overflow-hidden">
+            <div className="flex flex-1 overflow-hidden relative">
+                {isMobile && sidebarOpen && (
+                    <div
+                        className="absolute inset-0 bg-black/50 z-20 backdrop-blur-sm transition-opacity animate-fade-in"
+                        onClick={() => setSidebarOpen(false)}
+                    />
+                )}
                 <Sidebar
                     lessonId={state.lessonId}
                     selectedResourceType={state.selectedResourceType}
                     onSelectResourceType={handleSelectResourceType}
                     isOpen={sidebarOpen}
+                    isMobile={isMobile}
                 />
                 <main
                     ref={scrollElementRef}
@@ -134,11 +142,18 @@ export const TeacherView: React.FC = () => {
                                 />
                             </div>
                             <div className="flex-1 overflow-hidden">
-                                <ContentDisplay
-                                    lessonId={state.lessonId}
-                                    selectedResourceType={state.selectedResourceType}
-                                    user={user}
-                                />
+                                {state.selectedResourceType === 'below_average' ? (
+                                    <BelowAveragePage
+                                        lessonId={state.lessonId}
+                                        user={user}
+                                    />
+                                ) : (
+                                    <ContentDisplay
+                                        lessonId={state.lessonId}
+                                        selectedResourceType={state.selectedResourceType}
+                                        user={user}
+                                    />
+                                )}
                             </div>
                         </>
                     )}

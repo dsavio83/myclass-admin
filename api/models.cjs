@@ -104,6 +104,7 @@ const contentSchema = new mongoose.Schema({
     viewCount: { type: Number, default: 0 },
     downloadCount: { type: Number, default: 0 },
     isPublished: { type: Boolean, default: false }, // Publish toggle
+    category: { type: String, enum: ['standard', 'below_average_d_plus'], default: 'standard' }, // Content category
     metadata: { type: mongoose.Schema.Types.Mixed }
 }, { timestamps: true });
 

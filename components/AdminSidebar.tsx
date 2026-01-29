@@ -10,6 +10,7 @@ interface AdminSidebarProps {
 
 const allManagementLinks = [
     { id: 'browser', label: 'Content Browser', roles: ['admin', 'teacher'] },
+    { id: 'below-average', label: 'Below Average [D+]', roles: ['admin', 'teacher'] },
     { id: 'course-structure', label: 'Course Structure Management', roles: ['admin'] },
     { id: 'quiz-configuration', label: 'Quiz Configuration', roles: ['admin', 'teacher'] },
     { id: 'user-management', label: 'User Management', roles: ['admin'] },

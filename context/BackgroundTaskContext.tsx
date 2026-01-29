@@ -22,6 +22,7 @@ export interface UploadTask {
 
     // For Cloudinary strategy (Video, Audio)
     mimeType?: string;
+    category?: string;
 }
 
 interface BackgroundTaskContextType {
@@ -109,6 +110,9 @@ export const BackgroundTaskProvider: React.FC<{ children: ReactNode }> = ({ chil
             formData.append('lessonId', task.lessonId);
             formData.append('type', task.contentType);
             formData.append('title', task.title);
+            if (task.category) {
+                formData.append('category', task.category);
+            }
 
             if (task.folder) {
                 formData.append('folder', task.folder);
@@ -210,7 +214,8 @@ export const BackgroundTaskProvider: React.FC<{ children: ReactNode }> = ({ chil
                     publicId: result.public_id,
                     size: result.bytes,
                     mimeType: task.file.type,
-                    resourceType: 'video' // Cloudinary usually treats audio as video
+                    resourceType: 'video', // Cloudinary usually treats audio as video
+                    category: task.category
                 })
             });
 

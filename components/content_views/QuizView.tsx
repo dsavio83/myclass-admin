@@ -3,7 +3,9 @@ import { User, QuizQuestion, AnswerOption, Content } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
 import { QuizIcon } from '../icons/ResourceTypeIcons';
-import { ChevronRightIcon, EyeIcon, CheckCircleIcon, DownloadIcon, XIcon } from '../icons/AdminIcons';
+import { ChevronRightIcon, EyeIcon, CheckCircleIcon, DownloadIcon, XIcon, LinkIcon, PlusIcon } from '../icons/AdminIcons';
+import { StandardContentPicker } from '../common/StandardContentPicker';
+import { QuizConfiguration } from '../QuizConfiguration';
 import { PublishToggle } from '../common/PublishToggle';
 import { ContentStatusBanner } from '../common/ContentStatusBanner';
 import { useToast } from '../../context/ToastContext';
@@ -15,6 +17,7 @@ import { formatCount } from '../../utils/formatUtils';
 interface QuizViewProps {
     lessonId: string;
     user: User;
+    category?: string;
 }
 
 // --- Components for the Result Screen ---
@@ -236,10 +239,10 @@ const QuestionCard: React.FC<QuestionCardProps> = ({ question, index, totalQuest
 // --- Main View ---
 import { useContentUpdate } from '../../context/ContentUpdateContext';
 
-export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user }) => {
+export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) => {
     const [version, setVersion] = useState(0);
     const { triggerContentUpdate } = useContentUpdate();
-    const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['quiz'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user]);
+    const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['quiz'], (user.role !== 'admin' && !user.canEdit), category), [lessonId, version, user, category]);
     const { showToast } = useToast();
 
     const canEdit = user.role === 'admin' || !!user.canEdit;
@@ -251,11 +254,69 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user }) => {
     const [userAnswers, setUserAnswers] = useState<(number | null)[]>([]);
     const [viewMode, setViewMode] = useState<'list' | 'question' | 'result' | 'review'>('list');
     const [viewStats, setViewStats] = useState<{ count: number; downloads: number } | null>(null);
+    const [selectedQuestionIndices, setSelectedQuestionIndices] = useState<Set<number>>(new Set());
+
+    const toggleQuestionSelection = (index: number) => {
+        const newSet = new Set(selectedQuestionIndices);
+        if (newSet.has(index)) {
+            newSet.delete(index);
+        } else {
+            newSet.add(index);
+        }
+        setSelectedQuestionIndices(newSet);
+    };
+
+    const handleSaveQuestionSelection = async () => {
+        if (!selectedQuiz) return;
+
+        try {
+            const filteredQuestions = questions.filter((_, index) => selectedQuestionIndices.has(index));
+
+            await api.updateContent(selectedQuiz._id, {
+                body: JSON.stringify(filteredQuestions)
+            });
+
+            setQuestions(filteredQuestions);
+            // Reset indices to match new length (all selected)
+            const newIndices = new Set<number>();
+            for (let i = 0; i < filteredQuestions.length; i++) newIndices.add(i);
+            setSelectedQuestionIndices(newIndices);
+
+            showToast('Question selection updated successfully', 'success');
+            setVersion(v => v + 1);
+            triggerContentUpdate();
+        } catch (error) {
+            console.error('Failed to update questions:', error);
+            showToast('Failed to update questions', 'error');
+        }
+    };
 
     // Export state
     const [exportModalOpen, setExportModalOpen] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const exportContainerRef = useRef<HTMLDivElement>(null);
+    const [pickerOpen, setPickerOpen] = useState(false);
+    const [isCreating, setIsCreating] = useState(false);
+    const [isQuizConfigOpen, setIsQuizConfigOpen] = useState(false); // Helper if needed, but QuizConfig is separate usually. Wait, QuizView renders the list to PLAY. Adding is usually done via a separate tab or Config.
+    // The previous implementation used QuizConfiguration component separate from QuizView.
+    // However, the requested flow is to add/link from THIS page if we are in admin mode.
+    // Standard 'standard' QuizView typically only lists quizzes.
+    // But in D+ context, we want to Link.
+
+    // Note: QuizView.tsx is for TAKING quizzes usually. QuizConfiguration is for EDITING/ADDING.
+    // BUT the user interaction implies we are seeing this "Below Average" page which uses ContentDisplay -> QuizView.
+    // And users want to "Add New" here.
+    // The previous summary mentioned QuizConfiguration was updated.
+    // Let's check how "Add New" is normally surfaced. 
+    // Usually it's in QuizConfiguration.tsx. But here we are in QuizView.tsx.
+    // If QuizView is just for display, where is the "Add" button?
+    // In other views (Video, Audio), the Add button IS in the View.
+    // In QuizView, it seems there is NO "Add" button in the standard view, only Select.
+    // The "Add" functionality for Quizzes is usually in a separate "Quiz Configuration" tab/page.
+    // HOWEVER, for "Below Average" page, we want everything in one place?
+    // The BelowAveragePage uses ContentDisplay which renders QuizView.
+    // So if I want to "Link" a quiz, I should probably add the button here in QuizView when in List mode.
+
 
     // SweetAlert state
     const [sweetAlert, setSweetAlert] = useState<{
@@ -286,9 +347,34 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user }) => {
     useEffect(() => {
         const quizList = groupedContent?.[0]?.docs || [];
         setQuizzes(quizList);
+
+        // Auto-select first quiz ONLY for Admin/Editors
+        if (canEdit && quizList.length > 0) {
+            const firstQuiz = quizList[0];
+            setSelectedQuiz(firstQuiz);
+            if (firstQuiz.body) {
+                try {
+                    const parsedQuestions = JSON.parse(firstQuiz.body.replace(/&quot;/g, '"'));
+                    setQuestions(parsedQuestions);
+                    setUserAnswers(new Array(parsedQuestions.length).fill(null));
+
+                    // Init selection set with all indices for first quiz
+                    const indices = new Set<number>();
+                    parsedQuestions.forEach((_: any, i: number) => indices.add(i));
+                    setSelectedQuestionIndices(indices);
+                } catch (e) {
+                    console.error("Failed to parse quiz JSON:", e);
+                    setQuestions([]);
+                }
+            }
+        } else {
+            // For students, start with no selection (Card View)
+            setSelectedQuiz(null);
+            setQuestions([]);
+        }
+
         setViewMode('list');
-        setSelectedQuiz(null);
-    }, [groupedContent]);
+    }, [groupedContent, canEdit]);
 
     const selectQuiz = (quiz: Content) => {
         setSelectedQuiz(quiz);
@@ -298,8 +384,15 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user }) => {
                 const parsedQuestions = JSON.parse(quiz.body.replace(/&quot;/g, '"'));
                 setQuestions(parsedQuestions);
                 setUserAnswers(new Array(parsedQuestions.length).fill(null));
+
+                // Init selection set with all indices
+                const indices = new Set<number>();
+                parsedQuestions.forEach((_: any, i: number) => indices.add(i));
+                setSelectedQuestionIndices(indices);
+
                 setCurrentQuestionIndex(0);
-                setViewMode('question');
+                // Student -> Game Mode immediately. Admin -> Study List View.
+                setViewMode(canEdit ? 'list' : 'question');
             } catch (e) {
                 console.error("Failed to parse quiz JSON:", e);
                 setQuestions([]);
@@ -343,8 +436,37 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user }) => {
 
     const handleBackToList = () => {
         setViewMode('list');
-        setSelectedQuiz(null);
+        // If student, clear selection (go back to Grid).
+        // If admin, keep selection (go back to Tabs/Study View).
+        if (!canEdit) {
+            setSelectedQuiz(null);
+        }
     };
+
+    const handleLinkContent = async (selectedItems: Content[]) => {
+        try {
+            await Promise.all(selectedItems.map(item => {
+                // Copy the quiz
+                // Quizzes are stored in 'body' as JSON string
+                return api.addContent({
+                    lessonId,
+                    type: 'quiz',
+                    title: item.title,
+                    body: item.body,
+                    isPublished: false,
+                    category: category,
+                    metadata: item.metadata
+                });
+            }));
+            setVersion(v => v + 1);
+            triggerContentUpdate();
+            showToast(`Successfully linked ${selectedItems.length} quizzes`, 'success');
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to link content', 'error');
+        }
+    };
+
 
     const handleTogglePublish = async (quiz: Content) => {
         try {
@@ -538,6 +660,21 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user }) => {
 
     if (isLoading) return <div className="text-center p-8 text-gray-500">Loading Quiz...</div>;
 
+    if (isCreating) {
+        return (
+            <QuizConfiguration
+                lessonIdProp={lessonId}
+                categoryProp={category}
+                embedded={true}
+                onBack={() => {
+                    setIsCreating(false);
+                    setVersion(v => v + 1);
+                    triggerContentUpdate();
+                }}
+            />
+        );
+    }
+
     if (quizzes.length === 0) {
         return (
             <div className="p-8">
@@ -548,320 +685,478 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user }) => {
                             <h1 className="text-lg sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-rose-600 dark:from-white dark:to-rose-400">Quiz</h1>
                         </div>
                     </div>
+                    {canEdit && category === 'below_average_d_plus' && (
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setPickerOpen(true)}
+                                className="flex items-center gap-2 px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shadow-sm"
+                                title="Link Existing Standard Quiz"
+                            >
+                                <LinkIcon className="w-5 h-5" />
+                                <span className="hidden sm:inline">Link Existing</span>
+                            </button>
+                            <button
+                                onClick={() => setIsCreating(true)}
+                                className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                                title="Create New Quiz"
+                            >
+                                <PlusIcon className="w-5 h-5" />
+                                <span className="hidden sm:inline">Create New</span>
+                            </button>
+                        </div>
+                    )}
                 </div>
                 <div className="text-center py-20 bg-white dark:bg-gray-800/50 rounded-lg shadow-inner">
                     <QuizIcon className="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600" />
                     <p className="mt-4 text-gray-500">No quiz available for this chapter.</p>
                 </div>
+
+                <StandardContentPicker
+                    isOpen={pickerOpen}
+                    onClose={() => setPickerOpen(false)}
+                    onImport={handleLinkContent}
+                    lessonId={lessonId}
+                    resourceType="quiz"
+                />
             </div >
         );
     }
 
-    // --- Quiz Selection List ---
-    if (viewMode === 'list') {
+    // --- Game View (Full Screen) ---
+    if (viewMode === 'question' && selectedQuiz) {
         return (
-            <div className="flex flex-col h-full overflow-hidden">
-                {canEdit && quizzes.length > 0 && (
-                    <ContentStatusBanner
-                        publishedCount={quizzes.filter(q => q.isPublished).length}
-                        unpublishedCount={quizzes.filter(q => !q.isPublished).length}
-                    />
-                )}
-
-                <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-y-auto">
-                    <div className="flex justify-between items-center mb-6">
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-3">
-                                <QuizIcon className="w-8 h-8 text-rose-600" />
-                                <h1 className="text-lg sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-rose-600 dark:from-white dark:to-rose-400">Select a Quiz</h1>
-                            </div>
-                        </div>
-
-                        {!isLoading && quizzes.length > 0 && (
-                            <button
-                                onClick={handleExportInitiate}
-                                className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
-                                title="Export all Quizzes to PDF"
-                            >
-                                <DownloadIcon className="w-5 h-5" />
-                                <span className="hidden sm:inline">PDF</span>
-                                <span className="bg-white/20 px-1.5 py-0.5 rounded text-xs font-semibold ml-1">
-                                    {formatCount(viewStats?.downloads || 0)}
-                                </span>
-                            </button>
-                        )}
+            <div className="fixed inset-0 z-50 bg-gray-50 dark:bg-gray-900 flex flex-col animate-fade-in">
+                {/* Game Header */}
+                <div className="bg-white dark:bg-gray-800 p-4 shadow-sm border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                    <button onClick={handleBackToList} className="flex items-center gap-2 text-gray-600 dark:text-gray-300 hover:text-rose-600 transition-colors">
+                        <ChevronRightIcon className="w-5 h-5 rotate-180" />
+                        <span className="font-bold">Exit Quiz</span>
+                    </button>
+                    <div className="text-lg font-bold text-gray-800 dark:text-white truncate max-w-md">
+                        {selectedQuiz.title}
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {quizzes.map((quiz) => (
-                            <button
-                                key={quiz._id}
-                                onClick={() => selectQuiz(quiz)}
-                                className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md hover:shadow-lg transition-all border border-gray-100 dark:border-gray-700 text-left group relative"
-                            >
-                                {canEdit && (
-                                    <div
-                                        className="absolute top-4 right-4 z-10"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        <PublishToggle
-                                            isPublished={!!quiz.isPublished}
-                                            onToggle={() => handleTogglePublish(quiz)}
-                                        />
-                                    </div>
-                                )}
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
-                                        <QuizIcon className="w-8 h-8" />
-                                    </div>
-                                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded-md">
-                                        <EyeIcon className="w-3 h-3 text-gray-500 dark:text-gray-400" />
-                                        <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-                                            {formatCount(quiz.viewCount || 0)}
-                                        </span>
-                                    </div>
-                                </div>
-                                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">{quiz.title}</h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Click to start this quiz.</p>
-                            </button>
-                        ))}
+                    <div className="text-sm font-medium text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20 px-3 py-1 rounded-full">
+                        {currentQuestionIndex + 1} / {questions.length}
                     </div>
                 </div>
 
-                <ExportEmailModal
-                    isOpen={exportModalOpen}
-                    onClose={() => setExportModalOpen(false)}
-                    onExport={handleExportConfirm}
-                    isLoading={isExporting}
-                />
+                {/* Progress Bar */}
+                <div className="w-full bg-gray-200 dark:bg-gray-700 h-1.5">
+                    <div
+                        className="bg-rose-500 h-1.5 transition-all duration-300"
+                        style={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }}
+                    ></div>
+                </div>
 
-                <div
-                    ref={exportContainerRef}
-                    style={{
-                        position: 'fixed',
-                        top: '-10000px',
-                        left: '-10000px',
-                        width: '794px',
-                        visibility: 'visible',
-                        pointerEvents: 'none',
-                        zIndex: -9999,
-                    }}
-                />
+                {/* Game Content */}
+                <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex justify-center">
+                    <div className="w-full max-w-3xl">
+                        <QuestionCard
+                            question={questions[currentQuestionIndex]}
+                            index={currentQuestionIndex}
+                            totalQuestions={questions.length}
+                            userAnswerIndex={userAnswers[currentQuestionIndex]}
+                            onAnswerSelect={handleAnswerSelect}
+                            readOnly={false}
+                            showRationale={!!userAnswers[currentQuestionIndex]}
+                        />
 
-                {sweetAlert.show && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-                        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md p-8 transform transition-all scale-100 flex flex-col items-center text-center">
-                            {sweetAlert.type === 'loading' && (
-                                <div className="w-16 h-16 mb-4">
-                                    <svg className="animate-spin h-16 w-16 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                </div>
-                            )}
-                            {sweetAlert.type === 'success' && (
-                                <div className="w-16 h-16 bg-green-100 dark:bg-green-900/50 rounded-full flex items-center justify-center mb-4">
-                                    <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                                    </svg>
-                                </div>
-                            )}
-                            {sweetAlert.type === 'error' && (
-                                <div className="w-16 h-16 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center mb-4">
-                                    <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-                                    </svg>
-                                </div>
-                            )}
+                        {/* Navigation Actions */}
+                        <div className="flex justify-between mt-8">
+                            <button
+                                onClick={handlePrev}
+                                disabled={currentQuestionIndex === 0}
+                                className="px-6 py-3 rounded-xl bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold border border-gray-200 dark:border-gray-700 disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
+                            >
+                                Previous
+                            </button>
 
-                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">{sweetAlert.title}</h3>
-                            <p className="text-gray-600 dark:text-gray-300 mb-6 whitespace-pre-line">{sweetAlert.message}</p>
-
-                            {sweetAlert.type !== 'loading' && (
+                            {currentQuestionIndex < questions.length - 1 ? (
                                 <button
-                                    onClick={() => setSweetAlert(prev => ({ ...prev, show: false }))}
-                                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                                    onClick={handleNext}
+                                    className="px-8 py-3 rounded-xl bg-gradient-to-r from-rose-500 to-orange-500 text-white font-bold shadow-lg hover:shadow-rose-500/30 transform hover:-translate-y-1 transition-all flex items-center gap-2"
                                 >
-                                    சரி (OK)
+                                    Next Question
+                                    <ChevronRightIcon className="w-5 h-5" />
                                 </button>
-                            )}
-                            {sweetAlert.phone && sweetAlert.type === 'error' && (
-                                <a
-                                    href={`tel:${sweetAlert.phone}`}
-                                    className="mt-3 w-full py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                            ) : (
+                                <button
+                                    onClick={() => setViewMode('result')}
+                                    className="px-8 py-3 rounded-xl bg-gradient-to-r from-green-500 to-teal-500 text-white font-bold shadow-lg hover:shadow-green-500/30 transform hover:-translate-y-1 transition-all flex items-center gap-2 animate-pulse"
                                 >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
-                                    </svg>
-                                    அழை | Call Admin
-                                </a>
+                                    Finish Quiz
+                                    <CheckCircleIcon className="w-5 h-5" />
+                                </button>
                             )}
                         </div>
                     </div>
-                )}
-            </div >
+                </div>
+            </div>
         );
     }
 
     // --- Result View ---
-    if (viewMode === 'result') {
-        const isPassed = stats.accuracy >= 80;
-        const accuracyColor = isPassed ? '#22c55e' : (stats.accuracy >= 50 ? '#eab308' : '#ef4444');
-
+    if (viewMode === 'result' && selectedQuiz) {
         return (
-            <div className="p-4 sm:p-6 lg:p-8 flex items-center justify-center h-full overflow-y-auto">
-                <div className="max-w-4xl w-full bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl text-center relative overflow-hidden animate-fade-in">
-                    {isPassed && <Fireworks />}
-                    <h2 className="text-3xl font-extrabold mb-2 text-gray-800 dark:text-white">{isPassed ? "🎉 Outstanding Performance!" : "Quiz Completed!"}</h2>
-                    <p className="text-gray-500 dark:text-gray-400 mb-8">Here is the summary of your results.</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                        <div className="flex flex-col items-center justify-center space-y-6 bg-gray-50 dark:bg-gray-900/50 p-6 rounded-xl">
-                            <div className="flex justify-around w-full items-center">
-                                <CircularProgress percentage={stats.accuracy} color={accuracyColor} />
-                                <PieChart correct={stats.correct} wrong={stats.wrong} skipped={stats.skipped} />
+            <div className="fixed inset-0 z-50 bg-gray-50 dark:bg-gray-900 flex flex-col animate-fade-in overflow-y-auto">
+                <div className="min-h-screen flex items-center justify-center p-4">
+                    <div className="max-w-4xl w-full bg-white dark:bg-gray-800 rounded-3xl shadow-2xl overflow-hidden">
+                        {/* Result Header */}
+                        <div className="bg-gradient-to-br from-rose-600 to-orange-600 p-8 sm:p-12 text-center text-white relative overflow-hidden">
+                            <h1 className="text-3xl sm:text-4xl font-extrabold mb-2 relative z-10">Quiz Completed!</h1>
+                            <p className="text-rose-100 text-lg relative z-10">{selectedQuiz.title}</p>
+                            {stats.accuracy > 70 && <Fireworks />}
+                        </div>
+
+                        {/* Stats Grid */}
+                        <div className="p-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+                                <div className="flex justify-center items-center p-6 bg-gray-50 dark:bg-gray-700/30 rounded-2xl">
+                                    <CircularProgress percentage={stats.accuracy} color={stats.accuracy >= 80 ? '#22c55e' : stats.accuracy >= 50 ? '#eab308' : '#ef4444'} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <StatCard label="Total" value={stats.total} colorClass="text-gray-700 dark:text-gray-200" bgClass="bg-gray-50 dark:bg-gray-700/30" />
+                                    <StatCard label="Correct" value={stats.correct} colorClass="text-green-600 dark:text-green-400" bgClass="bg-green-50 dark:bg-green-900/20" />
+                                    <StatCard label="Wrong" value={stats.wrong} colorClass="text-red-600 dark:text-red-400" bgClass="bg-red-50 dark:bg-red-900/20" />
+                                    <StatCard label="Skipped" value={stats.skipped} colorClass="text-gray-500 dark:text-gray-400" bgClass="bg-gray-100 dark:bg-gray-700/50" />
+                                </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex flex-col sm:flex-row justify-center gap-4">
+                                <button onClick={handleRetry} className="flex-1 py-4 px-6 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-white font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                    Try Again
+                                </button>
+                                <button onClick={handleBackToList} className="flex-1 py-4 px-6 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 shadow-lg shadow-rose-500/30 transition-all flex items-center justify-center gap-2">
+                                    <ChevronRightIcon className="w-5 h-5 rotate-180" />
+                                    Back to Quiz List
+                                </button>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 content-center">
-                            <StatCard label="Total" value={stats.total} bgClass="bg-blue-50 dark:bg-blue-900/20" colorClass="text-blue-600 dark:text-blue-400" />
-                            <StatCard label="Correct" value={stats.correct} bgClass="bg-green-50 dark:bg-green-900/20" colorClass="text-green-600 dark:text-green-400" />
-                            <StatCard label="Wrong" value={stats.wrong} bgClass="bg-red-50 dark:bg-red-900/20" colorClass="text-red-600 dark:text-red-400" />
-                            <StatCard label="Skipped" value={stats.skipped} bgClass="bg-gray-100 dark:bg-gray-700/40" colorClass="text-gray-600 dark:text-gray-400" />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+
+    // --- Standard User: Card Grid View ---
+    if (!canEdit && viewMode === 'list') {
+        return (
+            <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900 overflow-y-auto p-4 sm:p-8 animate-fade-in custom-scrollbar">
+                <div className="max-w-7xl mx-auto w-full">
+                    <div className="flex items-center justify-between mb-8">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-gradient-to-br from-rose-500 to-orange-500 rounded-2xl shadow-lg shadow-rose-500/20">
+                                <QuizIcon className="w-8 h-8 text-white" />
+                            </div>
+                            <div>
+                                <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">Quizzes</h1>
+                                <p className="text-gray-500 dark:text-gray-400 font-medium">{quizzes.length} {quizzes.length === 1 ? 'Quiz' : 'Quizzes'} Available</p>
+                            </div>
                         </div>
                     </div>
-                    <div className="flex flex-col sm:flex-row justify-center gap-4">
-                        <button onClick={handleReview} className="px-8 py-3 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white font-semibold rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Review Answers</button>
-                        <button onClick={handleRetry} className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-1">Try Again</button>
-                        {quizzes.length > 1 && (
-                            <button onClick={handleBackToList} className="px-8 py-3 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-semibold rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-                                Other Quizzes
-                            </button>
-                        )}
-                    </div>
+
+                    {quizzes.length === 0 ? (
+                        <div className="text-center py-32 bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-dashed border-gray-200 dark:border-gray-700">
+                            <div className="w-20 h-20 bg-gray-50 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <QuizIcon className="w-10 h-10 text-gray-300 dark:text-gray-500" />
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">No quizzes yet</h3>
+                            <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto">Check back later for new study materials.</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {quizzes.map((quiz) => {
+                                let qCount = 0;
+                                try { qCount = JSON.parse(quiz.body?.replace(/&quot;/g, '"') || '[]').length } catch (e) { }
+
+                                return (
+                                    <button
+                                        key={quiz._id}
+                                        onClick={() => selectQuiz(quiz)}
+                                        className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 text-left group flex flex-col h-full"
+                                    >
+                                        <div className="flex justify-between items-start mb-6">
+                                            <div className="p-3 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-500 dark:text-orange-400 group-hover:bg-rose-500 group-hover:text-white transition-colors duration-300">
+                                                <QuizIcon className="w-6 h-6" />
+                                            </div>
+                                            <span className="px-3 py-1 rounded-full bg-gray-50 dark:bg-gray-700 text-xs font-bold text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-gray-600">{qCount} Qs</span>
+                                        </div>
+                                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 line-clamp-2 leading-tight group-hover:text-rose-600 transition-colors">{quiz.title}</h3>
+                                        <div className="mt-auto pt-4 border-t border-gray-50 dark:border-gray-700 flex items-center justify-between text-sm font-bold text-gray-400 group-hover:text-rose-600 transition-colors">
+                                            <span>Start Quiz</span>
+                                            <div className="w-8 h-8 rounded-full bg-gray-50 dark:bg-gray-700 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/30 flex items-center justify-center transition-colors">
+                                                <ChevronRightIcon className="w-4 h-4" />
+                                            </div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             </div>
         );
     }
 
-    // --- Review Mode (Scrollable List) ---
-    if (viewMode === 'review') {
-        return (
-            <div className="p-4 sm:p-6 lg:p-8 flex flex-col h-full">
-                <div className="flex justify-between items-center mb-1 shrink-0 bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-                    <h1 className="text-lg sm:text-2xl font-bold text-gray-800 dark:text-white">Review Answers</h1>
-                    <button onClick={handleBackToList} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">
-                        Back to Quiz List
-                    </button>
-                </div>
-                <div className="flex-1 overflow-y-auto max-w-4xl mx-auto w-full pb-10">
-                    {questions.map((question, index) => (
-                        <QuestionCard
-                            key={index}
-                            question={question}
-                            index={index}
-                            totalQuestions={questions.length}
-                            userAnswerIndex={userAnswers[index]}
-                            onAnswerSelect={() => { }}
-                            readOnly={true}
-                            showRationale={true}
-                        />
-                    ))}
-                    <div className="flex justify-center mt-8">
-                        <button onClick={handleBackToList} className="px-8 py-3 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white font-semibold rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600">
-                            Back to Quiz List
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // --- Active Quiz Mode ---
+    // --- Admin: Tabbed Quiz View (List Mode) ---
     return (
-        <div className="p-4 sm:p-6 lg:p-8 flex flex-col h-full">
-            {/* Header */}
-            <div className="flex justify-between items-center mb-1 shrink-0">
-                <div className="flex items-center gap-4">
+        <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900 overflow-y-auto custom-scrollbar relative">
+            {/* Header Section (Scrolls Away) */}
+            <div className="bg-white dark:bg-gray-800 p-4 sm:px-6 shadow-sm z-10 relative">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center gap-3">
-                        {quizzes.length > 1 && (
-                            <button onClick={handleBackToList} className="mr-4 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors" title="Back to Quiz List">
-                                <ChevronRightIcon className="w-5 h-5 transform rotate-180 text-gray-500" />
+                        <div className="p-2 bg-rose-100 dark:bg-rose-900/30 rounded-lg">
+                            <QuizIcon className="w-6 h-6 text-rose-600 dark:text-rose-400" />
+                        </div>
+                        <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+                            Quizzes
+                        </h1>
+                        {quizzes.length > 0 && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300">
+                                {quizzes.length}
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                        {!isLoading && quizzes.length > 0 && (
+                            <button
+                                onClick={handleExportInitiate}
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm text-sm font-medium"
+                                title="Export all Quizzes to PDF"
+                            >
+                                <DownloadIcon className="w-4 h-4" />
+                                <span className="hidden sm:inline">PDF</span>
                             </button>
                         )}
-                        <QuizIcon className="w-8 h-8 text-rose-600" />
-                        <h1 className="text-lg sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-rose-600 dark:from-white dark:to-rose-400">{selectedQuiz?.title || 'Quiz'}</h1>
 
-                        {/* View Count for Active Quiz */}
-                        {selectedQuiz && (
-                            <div className="flex items-center gap-1.5 px-3 py-1 bg-gray-100 dark:bg-gray-700/50 rounded-full ml-2">
-                                <EyeIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                                <span className="text-sm font-bold text-gray-600 dark:text-gray-300 animate-slide-up">
-                                    {formatCount(selectedQuiz.viewCount || 0)}
-                                </span>
-                            </div>
+                        {canEdit && category === 'below_average_d_plus' && (
+                            <>
+                                <button
+                                    onClick={() => setPickerOpen(true)}
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shadow-sm text-sm font-medium"
+                                >
+                                    <LinkIcon className="w-4 h-4" />
+                                    <span>Link</span>
+                                </button>
+                                <button
+                                    onClick={() => setIsCreating(true)}
+                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium"
+                                >
+                                    <PlusIcon className="w-4 h-4" />
+                                    <span>Create</span>
+                                </button>
+                            </>
                         )}
                     </div>
                 </div>
             </div>
 
-            {/* Question Card Container */}
-            <div className="flex-1 overflow-y-auto">
-                <div className="max-w-4xl mx-auto">
-                    <QuestionCard
-                        question={questions[currentQuestionIndex]}
-                        index={currentQuestionIndex}
-                        totalQuestions={questions.length}
-                        userAnswerIndex={userAnswers[currentQuestionIndex]}
-                        onAnswerSelect={handleAnswerSelect}
-                        readOnly={false}
-                        showRationale={true} // Always show rationale after answering in strict mode
-                    />
-
-                    {/* Navigation Buttons */}
-                    <div className="flex justify-between items-center pt-2 pb-10">
-                        <button
-                            onClick={handlePrev}
-                            disabled={currentQuestionIndex === 0}
-                            className="px-6 py-2.5 rounded-xl text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors shadow-sm"
-                        >
-                            Previous
-                        </button>
-
-                        <button
-                            onClick={async () => {
-                                // Increment view count if first question and not already counted in this session
-                                if (currentQuestionIndex === 0 && selectedQuiz && !viewStats?.count) {
-                                    try {
-                                        const res = await api.incrementViewCount(selectedQuiz._id);
-                                        if (res.success) {
-                                            setViewStats(prev => ({ ...prev!, count: 1 })); // Mark as counted locally
-
-                                            // Update local state immediately so list reflects it
-                                            setQuizzes(prevQuizzes => prevQuizzes.map(q =>
-                                                q._id === selectedQuiz._id
-                                                    ? { ...q, viewCount: (q.viewCount || 0) + 1 }
-                                                    : q
-                                            ));
-
-                                            // Update selectedQuiz as well for header
-                                            setSelectedQuiz(prev => prev ? { ...prev, viewCount: (prev.viewCount || 0) + 1 } : null);
-                                        }
-                                    } catch (e) {
-                                        console.error("Failed to increment quiz view", e);
+            {/* Tabs (Sticky) */}
+            {quizzes.length > 0 && (
+                <div className="sticky top-0 z-20 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm px-4 sm:px-6 py-2 transition-all">
+                    <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                        {quizzes.map((quiz) => (
+                            <button
+                                key={quiz._id}
+                                onClick={() => selectQuiz(quiz)}
+                                className={`
+                                    whitespace-nowrap px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 border flex-shrink-0
+                                    ${selectedQuiz?._id === quiz._id
+                                        ? 'bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-900/20 dark:border-rose-800 dark:text-rose-300 shadow-sm'
+                                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-750 dark:hover:text-gray-200'
                                     }
-                                }
-                                handleNext();
-                            }}
-                            className={`flex items-center gap-2 px-8 py-2.5 rounded-xl text-white font-semibold transition-all shadow-md hover:shadow-lg transform active:scale-95 ${userAnswers[currentQuestionIndex] !== null
-                                ? "bg-blue-600 hover:bg-blue-700"
-                                : "bg-gray-500 hover:bg-gray-600"
-                                }`}
-                        >
-                            <span>{currentQuestionIndex === questions.length - 1 ? 'Finish Quiz' : 'Next Question'}</span>
-                            <ChevronRightIcon className="w-4 h-4" />
-                        </button>
+                                `}
+                            >
+                                {quiz.title}
+                            </button>
+                        ))}
                     </div>
                 </div>
+            )}
+
+            {/* Content Area (Natural Flow) */}
+            <div className="flex-1 bg-gray-50 dark:bg-gray-900/50 p-4 sm:p-6 pb-20">
+                {isLoading ? (
+                    <div className="flex justify-center items-center h-full text-gray-500">Loading...</div>
+                ) : quizzes.length === 0 ? (
+                    <div className="h-full flex flex-col justify-center items-center text-center p-8">
+                        <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-sm border border-dashed border-gray-300 dark:border-gray-700 max-w-md">
+                            <QuizIcon className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+                            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Quizzes Available</h3>
+                            <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">
+                                Get started by creating a new quiz or linking an existing one.
+                            </p>
+                            {canEdit && category === 'below_average_d_plus' && (
+                                <div className="flex gap-3 justify-center">
+                                    <button
+                                        onClick={() => setPickerOpen(true)}
+                                        className="px-4 py-2 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded-lg text-sm font-medium transition-colors"
+                                    >
+                                        Link Existing
+                                    </button>
+                                    <button
+                                        onClick={() => setIsCreating(true)}
+                                        className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors border border-transparent shadow-sm"
+                                    >
+                                        Create New
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ) : selectedQuiz && questions.length > 0 ? (
+                    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
+                        {/* Quiz Info / Header in content */}
+                        <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={() => setViewMode('question')}
+                                    className="px-4 py-2 bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-600 hover:to-orange-600 text-white font-bold rounded-lg shadow-md transition-all flex items-center gap-2 transform hover:scale-105"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                                    </svg>
+                                    Play Quiz
+                                </button>
+                                <div>
+                                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">{selectedQuiz.title}</h2>
+                                    <p className="text-sm text-gray-500">{questions.length} Questions</p>
+                                </div>
+                            </div>
+                            {canEdit && (
+                                <div className="flex gap-2 items-center">
+                                    {/* Selection Controls for D+ Category */}
+                                    {category === 'below_average_d_plus' && (
+                                        <div className="flex items-center gap-2 mr-4 border-r border-gray-200 dark:border-gray-700 pr-4">
+                                            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                                                Selected: {selectedQuestionIndices.size} / {questions.length}
+                                            </span>
+                                            {selectedQuestionIndices.size !== questions.length && (
+                                                <button
+                                                    onClick={handleSaveQuestionSelection}
+                                                    className="px-3 py-1.5 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-colors shadow-sm animate-pulse"
+                                                >
+                                                    Save Changes
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                    <PublishToggle
+                                        isPublished={!!selectedQuiz.isPublished}
+                                        onToggle={() => handleTogglePublish(selectedQuiz)}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Questions List */}
+                        {questions.map((question, index) => (
+                            <div key={index} className="relative group">
+                                {canEdit && category === 'below_average_d_plus' && (
+                                    <div className="absolute top-6 left-[-40px] z-10">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedQuestionIndices.has(index)}
+                                            onChange={() => toggleQuestionSelection(index)}
+                                            className="w-6 h-6 text-rose-600 rounded border-gray-300 focus:ring-rose-500 cursor-pointer shadow-sm transition-transform hover:scale-110"
+                                        />
+                                    </div>
+                                )}
+                                <div className={`transition-opacity duration-300 ${canEdit && category === 'below_average_d_plus' && !selectedQuestionIndices.has(index) ? 'opacity-40 grayscale' : 'opacity-100'
+                                    }`}>
+                                    <QuestionCard
+                                        question={question}
+                                        index={index}
+                                        totalQuestions={questions.length}
+                                        userAnswerIndex={null}
+                                        onAnswerSelect={() => { }}
+                                        readOnly={true}
+                                        showRationale={true}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : selectedQuiz ? (
+                    <div className="text-center py-20 text-gray-500">
+                        This quiz has no questions.
+                    </div>
+                ) : null}
             </div>
+
+            <ExportEmailModal
+                isOpen={exportModalOpen}
+                onClose={() => setExportModalOpen(false)}
+                onExport={handleExportConfirm}
+                isLoading={isExporting}
+            />
+
+            <StandardContentPicker
+                isOpen={pickerOpen}
+                onClose={() => setPickerOpen(false)}
+                onImport={handleLinkContent}
+                lessonId={lessonId}
+                resourceType="quiz"
+            />
+
+            <div
+                ref={exportContainerRef}
+                style={{
+                    position: 'fixed',
+                    top: '-10000px',
+                    left: '-10000px',
+                    width: '794px',
+                    visibility: 'visible',
+                    pointerEvents: 'none',
+                    zIndex: -9999,
+                }}
+            />
+
+            {sweetAlert.show && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md p-8 transform transition-all scale-100 flex flex-col items-center text-center">
+                        {sweetAlert.type === 'loading' && (
+                            <div className="w-16 h-16 mb-4">
+                                <svg className="animate-spin h-16 w-16 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </div>
+                        )}
+                        {sweetAlert.type === 'success' && (
+                            <div className="w-16 h-16 bg-green-100 dark:bg-green-900/50 rounded-full flex items-center justify-center mb-4">
+                                <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                            </div>
+                        )}
+                        {sweetAlert.type === 'error' && (
+                            <div className="w-16 h-16 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center mb-4">
+                                <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </div>
+                        )}
+
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">{sweetAlert.title}</h3>
+                        <p className="text-gray-600 dark:text-gray-300 mb-6 whitespace-pre-line">{sweetAlert.message}</p>
+
+                        {sweetAlert.type !== 'loading' && (
+                            <button
+                                onClick={() => setSweetAlert(prev => ({ ...prev, show: false }))}
+                                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                            >
+                                சரி (OK)
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
         </div >
     );
 };

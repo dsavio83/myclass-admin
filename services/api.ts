@@ -119,9 +119,9 @@ export const deleteLesson = (id: string): Promise<{ success: boolean }> => apiRe
 
 // --- Content ---
 
-export const getContentsByLessonId = (lessonId: string, types?: ResourceType[], onlyPublished?: boolean): Promise<GroupedContent[]> => {
+export const getContentsByLessonId = (lessonId: string, types?: ResourceType[], onlyPublished?: boolean, category?: string): Promise<GroupedContent[]> => {
     let url = `/content?lessonId=${lessonId}`;
-    console.log('[API] getContentsByLessonId called:', { lessonId, types, url, onlyPublished });
+    console.log('[API] getContentsByLessonId called:', { lessonId, types, url, onlyPublished, category });
     if (types && types.length > 0) {
         // Add type filter to URL - backend supports single type parameter
         url += `&type=${types[0]}`;
@@ -129,6 +129,9 @@ export const getContentsByLessonId = (lessonId: string, types?: ResourceType[], 
     }
     if (onlyPublished) {
         url += '&onlyPublished=true';
+    }
+    if (category) {
+        url += `&category=${category}`;
     }
     return apiRequest(url);
 };
@@ -148,6 +151,7 @@ export interface QAFilters {
     marks?: number;
     limit?: number;
     skip?: number;
+    category?: string;
 }
 
 export interface QAStats {
@@ -173,6 +177,7 @@ export const getQAByLessonId = async (
         if (filters.marks) params.append('marks', filters.marks.toString());
         if (filters.limit) params.append('limit', filters.limit.toString());
         if (filters.skip) params.append('skip', filters.skip.toString());
+        if (filters.category) params.append('category', filters.category);
     }
 
     if (params.toString()) {

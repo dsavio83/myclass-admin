@@ -63,6 +63,7 @@ const contentSchema = new mongoose.Schema({
     fileSize: { type: Number }, // Size of uploaded file in bytes
     viewCount: { type: Number, default: 0 }, // Number of times content has been viewed
     downloadCount: { type: Number, default: 0 }, // Number of times content has been downloaded
+    category: { type: String, enum: ['standard', 'below_average_d_plus'], default: 'standard' }, // Content category
     metadata: { type: mongoose.Schema.Types.Mixed } // Flexible field for various metadata
 }, { timestamps: true });
 

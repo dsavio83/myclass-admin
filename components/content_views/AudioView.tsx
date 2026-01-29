@@ -6,7 +6,8 @@ import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
 import { AudioIcon } from '../icons/ResourceTypeIcons';
-import { TrashIcon, UploadCloudIcon, PlusIcon, PlayIcon, PauseIcon, SpeakerIcon, SpeakerMuteIcon, EyeIcon, CheckCircleIcon } from '../icons/AdminIcons';
+import { TrashIcon, UploadCloudIcon, PlusIcon, PlayIcon, PauseIcon, SpeakerIcon, SpeakerMuteIcon, EyeIcon, CheckCircleIcon, LinkIcon } from '../icons/AdminIcons';
+import { StandardContentPicker } from '../common/StandardContentPicker';
 import { ConfirmModal } from '../ConfirmModal';
 import { useToast } from '../../context/ToastContext';
 import { formatCount } from '../../utils/formatUtils';
@@ -15,6 +16,7 @@ import { ContentStatusBanner } from '../common/ContentStatusBanner';
 interface AudioViewProps {
     lessonId: string;
     user: User;
+    category?: string;
 }
 
 // Custom Audio Player with Visualizer
@@ -357,7 +359,7 @@ const SavedAudioViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
     );
 };
 
-const AddAudioForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd: () => void; onCancel: () => void; }> = ({ lessonId, existingTitles, onAdd, onCancel }) => {
+const AddAudioForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd: () => void; onCancel: () => void; category?: string; }> = ({ lessonId, existingTitles, onAdd, onCancel, category }) => {
     const [activeTab, setActiveTab] = useState<'upload' | 'link'>('upload');
     const [title, setTitle] = useState('');
     const [folderPath, setFolderPath] = useState('');
@@ -448,7 +450,8 @@ const AddAudioForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd
             title: title,
             file: file,
             lessonId: lessonId,
-            mimeType: file.type
+            mimeType: file.type,
+            category: category // Pass category
         });
 
         showToast('Audio upload started in background', 'info');
@@ -465,6 +468,7 @@ const AddAudioForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd
                 body: url,
                 lessonId,
                 type: 'audio',
+                category: category || 'standard',
                 metadata: {
                     category: 'External',
                     audioUrl: url
@@ -603,12 +607,13 @@ const AddAudioForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd
     );
 };
 
-export const AudioView: React.FC<AudioViewProps> = ({ lessonId, user }) => {
+export const AudioView: React.FC<AudioViewProps> = ({ lessonId, user, category }) => {
     const [version, setVersion] = useState(0);
     const { triggerContentUpdate, updateVersion } = useContentUpdate();
-    const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['audio'], (user.role !== 'admin' && !user.canEdit)), [lessonId, version, user, updateVersion]);
+    const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['audio'], (user.role !== 'admin' && !user.canEdit), category), [lessonId, version, user, updateVersion, category]);
     const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; onConfirm: (() => void) | null }>({ isOpen: false, onConfirm: null });
     const [showAddForm, setShowAddForm] = useState(false);
+    const [pickerOpen, setPickerOpen] = useState(false);
     const [stats, setStats] = useState<{ count: number } | null>(null);
     const { showToast } = useToast();
 
@@ -661,6 +666,33 @@ export const AudioView: React.FC<AudioViewProps> = ({ lessonId, user }) => {
         setShowAddForm(false);
     };
 
+    const handleLinkContent = async (selectedItems: Content[]) => {
+        try {
+            await Promise.all(selectedItems.map(item => {
+                const title = item.title;
+                const metadata = item.metadata || {};
+
+                return api.addContent({
+                    lessonId,
+                    type: 'audio',
+                    title: title,
+                    body: item.body, // Contains URL for external links
+                    isPublished: false,
+                    category: category,
+                    filePath: item.filePath,
+                    file: item.file,
+                    metadata: metadata
+                });
+            }));
+            setVersion(v => v + 1);
+            triggerContentUpdate();
+            showToast(`Successfully linked ${selectedItems.length} audio files`, 'success');
+        } catch (e) {
+            console.error(e);
+            showToast('Failed to link content', 'error');
+        }
+    };
+
     return (
         <div className="h-full flex flex-col overflow-hidden">
             {canEdit && audioContents.length > 0 && (
@@ -680,10 +712,22 @@ export const AudioView: React.FC<AudioViewProps> = ({ lessonId, user }) => {
                     </div>
 
                     {canEdit && !showAddForm && (
-                        <button onClick={() => setShowAddForm(true)} className="flex items-center justify-center p-2.5 w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors sm:px-4 sm:w-auto sm:h-auto" title="Add New Audio">
-                            <PlusIcon className="w-5 h-5" />
-                            <span className="hidden sm:inline sm:ml-2">Add New</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {category === 'below_average_d_plus' && (
+                                <button
+                                    onClick={() => setPickerOpen(true)}
+                                    className="flex items-center justify-center p-2.5 w-10 h-10 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors sm:px-4 sm:w-auto sm:h-auto"
+                                    title="Link Existing Standard Content"
+                                >
+                                    <LinkIcon className="w-5 h-5" />
+                                    <span className="hidden sm:inline sm:ml-2">Link Existing</span>
+                                </button>
+                            )}
+                            <button onClick={() => setShowAddForm(true)} className="flex items-center justify-center p-2.5 w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors sm:px-4 sm:w-auto sm:h-auto" title="Add New Audio">
+                                <PlusIcon className="w-5 h-5" />
+                                <span className="hidden sm:inline sm:ml-2">Add New</span>
+                            </button>
+                        </div>
                     )}
                 </div>
 
@@ -691,7 +735,7 @@ export const AudioView: React.FC<AudioViewProps> = ({ lessonId, user }) => {
                     {isLoading && <div className="text-center py-10">Loading audio...</div>}
 
                     {!isLoading && showAddForm && (
-                        <AddAudioForm lessonId={lessonId} existingTitles={audioContents.map(a => a.title)} onAdd={handleAddSuccess} onCancel={() => setShowAddForm(false)} />
+                        <AddAudioForm lessonId={lessonId} existingTitles={audioContents.map(a => a.title)} onAdd={handleAddSuccess} onCancel={() => setShowAddForm(false)} category={category} />
                     )}
 
                     {!isLoading && !showAddForm && audioContents.length > 0 && (
@@ -714,6 +758,14 @@ export const AudioView: React.FC<AudioViewProps> = ({ lessonId, user }) => {
                 </div>
 
                 <ConfirmModal isOpen={confirmModal.isOpen} onClose={() => setConfirmModal({ isOpen: false, onConfirm: null })} onConfirm={confirmModal.onConfirm} title="Remove Audio" message="Are you sure you want to remove this audio file?" />
+
+                <StandardContentPicker
+                    isOpen={pickerOpen}
+                    onClose={() => setPickerOpen(false)}
+                    onImport={handleLinkContent}
+                    lessonId={lessonId}
+                    resourceType="audio"
+                />
             </div>
         </div>
     );

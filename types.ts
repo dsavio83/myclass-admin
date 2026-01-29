@@ -55,7 +55,7 @@ export interface Lesson {
   isPublished?: boolean;
 }
 
-export type ResourceType = 'book' | 'flashcard' | 'notes' | 'qa' | 'activity' | 'video' | 'audio' | 'worksheet' | 'questionPaper' | 'quiz' | 'slide';
+export type ResourceType = 'book' | 'flashcard' | 'notes' | 'qa' | 'activity' | 'video' | 'audio' | 'worksheet' | 'questionPaper' | 'quiz' | 'slide' | 'below_average';
 
 export type QuestionPaperCategory = 'Monthly' | 'Term Exam' | 'Model Exam' | 'SSLC Exam' | 'Custom';
 
@@ -95,6 +95,7 @@ export interface Content {
   viewCount?: number;
   downloadCount?: number;
   isPublished?: boolean;
+  category?: string; // Standard or Below Average [D+] or others
 
   // Unified Cloudinary Model
   file?: {

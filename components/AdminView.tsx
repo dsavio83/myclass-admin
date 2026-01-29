@@ -8,6 +8,7 @@ import { ClassManagement } from './ClassManagement';
 import { UserManagement } from './UserManagement';
 import { QuizConfiguration } from './QuizConfiguration';
 import { ReportsPage } from './ReportsPage';
+import { BelowAveragePage } from './BelowAveragePage';
 import { ProfilePage } from './ProfilePage';
 import { AdminCollectionsPanel } from './AdminCollectionsPanel';
 import { ResourceType } from '../types';
@@ -184,6 +185,31 @@ export const AdminView: React.FC = () => {
                                 lessonId={state.lessonId}
                                 selectedResourceType={state.selectedResourceType}
                                 user={user}
+                            />
+                        </div>
+                    </div>
+                );
+            case 'below-average':
+                return (
+                    <div className="flex flex-col h-full">
+                        <CascadeSelectors
+                            classId={state.classId}
+                            subjectId={state.subjectId}
+                            unitId={state.unitId}
+                            subUnitId={state.subUnitId}
+                            lessonId={state.lessonId}
+                            onClassChange={handleClassChange}
+                            onSubjectChange={handleSubjectChange}
+                            onUnitChange={handleUnitChange}
+                            onSubUnitChange={handleSubUnitChange}
+                            onLessonChange={handleLessonChange}
+                            onlyPublished={user.role !== 'admin' && !user.canEdit}
+                        />
+                        <div className="flex-1 overflow-hidden">
+                            <BelowAveragePage
+                                lessonId={state.lessonId}
+                                user={user}
+                                readOnly={true}
                             />
                         </div>
                     </div>

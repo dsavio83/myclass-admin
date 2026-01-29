@@ -343,7 +343,14 @@ const ImportJsonModal: React.FC<{
     );
 };
 
-export const QuizConfiguration: React.FC = () => {
+interface QuizConfigurationProps {
+    lessonIdProp?: string;
+    categoryProp?: string;
+    embedded?: boolean;
+    onBack?: () => void;
+}
+
+export const QuizConfiguration: React.FC<QuizConfigurationProps> = ({ lessonIdProp, categoryProp, embedded, onBack }) => {
     // Get global session state for initial values
     const { session } = useSession();
     const { adminState } = session;
@@ -353,7 +360,7 @@ export const QuizConfiguration: React.FC = () => {
     const [subjectId, setSubjectId] = useState<string | null>(adminState.subjectId || null);
     const [unitId, setUnitId] = useState<string | null>(adminState.unitId || null);
     const [subUnitId, setSubUnitId] = useState<string | null>(adminState.subUnitId || null);
-    const [lessonId, setLessonId] = useState<string | null>(adminState.lessonId || null);
+    const [lessonId, setLessonId] = useState<string | null>(lessonIdProp || adminState.lessonId || null);
 
     // Track previous values to prevent unwanted resets on mount/init
     const prevClassId = React.useRef(classId);
@@ -371,6 +378,7 @@ export const QuizConfiguration: React.FC = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [importModalOpen, setImportModalOpen] = useState(false);
+    const [selectedCategory, setSelectedCategory] = useState<string>(categoryProp || 'standard');
 
     const { showToast } = useToast();
 
@@ -455,7 +463,7 @@ export const QuizConfiguration: React.FC = () => {
 
         setIsLoading(true);
         try {
-            const grouped = await api.getContentsByLessonId(lessonId, ['quiz']);
+            const grouped = await api.getContentsByLessonId(lessonId, ['quiz'], false, selectedCategory);
             const quizzes = grouped?.[0]?.docs || [];
             setQuizList(quizzes);
 
@@ -480,13 +488,13 @@ export const QuizConfiguration: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [lessonId, selectedQuizId, selectQuiz, createNewQuiz, showToast]);
+    }, [lessonId, selectedCategory, selectedQuizId, selectQuiz, createNewQuiz, showToast]);
 
     // Fetch existing quizzes when lessonId changes
     useEffect(() => {
         // Initial load
         loadQuizzes();
-    }, [lessonId]); // dependency on loadQuizzes might cause loops if not careful, better to just depend on lessonId and call function
+    }, [lessonId, selectedCategory]); // dependency on loadQuizzes might cause loops if not careful, better to just depend on lessonId and call function
 
     // CRUD Operations for Questions
     const addQuestion = () => {
@@ -703,7 +711,8 @@ export const QuizConfiguration: React.FC = () => {
                     lessonId,
                     type: 'quiz',
                     title: quizTitle,
-                    body
+                    body,
+                    category: selectedCategory
                 });
                 console.log('[handleSave] Create response:', savedContent);
                 setQuizList(prev => [...prev, savedContent]);
@@ -807,42 +816,49 @@ export const QuizConfiguration: React.FC = () => {
                 status: error?.status
             });
 
-            // Show error message
-            Swal.fire({
-                title: 'Delete Failed!',
-                html: `
-                    <p>Failed to delete the quiz from the database.</p>
-                    <p class="text-sm text-gray-600 mt-2">Error: ${error?.message || 'Unknown error'}</p>
-                `,
-                icon: 'error',
-                confirmButtonText: 'OK'
-            });
 
             showToast('Failed to delete quiz. Please try again.', 'error');
         }
     };
 
-
     return (
-        <div className="flex flex-col h-full bg-gray-100 dark:bg-gray-900">
-            {/* Selectors Area */}
-            <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm sticky top-0 z-10">
-                <div className="p-4">
-                    <h1 className="text-lg sm:text-2xl font-bold text-gray-800 dark:text-white mb-4">Quiz Configuration</h1>
-                    <CascadeSelectors
-                        classId={classId}
-                        subjectId={subjectId}
-                        unitId={unitId}
-                        subUnitId={subUnitId}
-                        lessonId={lessonId}
-                        onClassChange={setClassId}
-                        onSubjectChange={setSubjectId}
-                        onUnitChange={setUnitId}
-                        onSubUnitChange={setSubUnitId}
-                        onLessonChange={setLessonId}
-                    />
+        <div className={`p-4 sm:p-6 max-w-7xl mx-auto space-y-6 animate-fade-in ${embedded ? 'bg-gray-50 dark:bg-gray-900/50 rounded-xl' : ''}`}>
+            {embedded && onBack && (
+                <button
+                    onClick={onBack}
+                    className="flex items-center gap-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white mb-4 transition-colors"
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    <span>Back to Quiz List</span>
+                </button>
+            )}
+
+            {!embedded && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                    <div className="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
+                        <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                            <span className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                            </span>
+                            Select Lesson
+                        </h2>
+                    </div>
+                    <div className="p-4 sm:p-6">
+                        <CascadeSelectors
+                            classId={classId}
+                            onClassChange={setClassId}
+                            subjectId={subjectId}
+                            onSubjectChange={setSubjectId}
+                            unitId={unitId}
+                            onUnitChange={setUnitId}
+                            subUnitId={subUnitId}
+                            onSubUnitChange={setSubUnitId}
+                            lessonId={lessonId}
+                            onLessonChange={setLessonId}
+                        />
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Content Area */}
             <div className="flex-1 overflow-hidden flex">
@@ -1074,6 +1090,6 @@ export const QuizConfiguration: React.FC = () => {
                     setIsDirty(true);
                 }}
             />
-        </div>
+        </div >
     );
 };
