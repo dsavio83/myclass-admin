@@ -25,9 +25,9 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, activePage, 
     const visibleLinks = allManagementLinks.filter(link => link.roles.includes(userRole));
 
     return (
-        <aside className={`flex flex-col bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out ${isOpen ? 'w-72' : 'w-0'} overflow-hidden shrink-0`}>
+        <aside className={`flex flex-col bg-white dark:bg-black border-l border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out ${isOpen ? 'w-72' : 'w-0'} overflow-hidden shrink-0`}>
             <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-                <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
                     {userRole === 'admin' ? 'Admin Panel' : 'Editor Panel'}
                 </h2>
             </div>
@@ -38,7 +38,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, activePage, 
                         onClick={() => setActivePage(link.id)}
                         className={`w-full text-left px-3 py-2 text-sm font-medium rounded-md transition-colors ${activePage === link.id
                             ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
-                            : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300'
+                            : 'hover:bg-gray-100 dark:hover:bg-gray-900 text-gray-600 dark:text-white'
                             }`}
                     >
                         {link.label}

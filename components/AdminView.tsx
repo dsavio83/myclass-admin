@@ -271,7 +271,7 @@ export const AdminView: React.FC = () => {
                 <main
                     ref={scrollElementRef}
                     onScroll={handleScroll}
-                    className="flex-1 flex flex-col bg-gray-100 dark:bg-gray-800 overflow-y-auto relative transition-all duration-300 border-l border-gray-200 dark:border-gray-700 h-full">
+                    className="flex-1 flex flex-col bg-gray-100 dark:bg-black overflow-y-auto relative transition-all duration-300 border-l border-gray-200 dark:border-gray-700 h-full">
                     {renderContent()}
                 </main>
                 <AdminSidebar

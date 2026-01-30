@@ -34,7 +34,7 @@ const getBackTheme = () => {
     const bg = 'linear-gradient(135deg, #ffffff, #f5f5f5)'; // White to light gray gradient
     return {
         bg: bg,
-        textClass: 'text-black [&_*]:text-black', // Pure black text with forced inheritance
+        textClass: 'text-black [&_*]:!text-black font-bold', // Strictly Black and Bold
         borderClass: 'border-gray-800 dark:border-gray-700' // Dark border for light background
     };
 };

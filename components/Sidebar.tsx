@@ -31,10 +31,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     : 'relative';
 
   return (
-    <aside className={`flex flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out ${widthClass} ${positionClass} overflow-hidden shrink-0`}>
+    <aside className={`flex flex-col bg-white dark:bg-black border-r border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out ${widthClass} ${positionClass} overflow-hidden shrink-0`}>
       <div className={`flex-1 overflow-y-auto no-scrollbar ${isCollapsed ? 'p-2' : 'p-4'}`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         {!isCollapsed && (
-          <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-gray-100 flex items-center gap-2">
+          <h2 className="text-lg font-bold mb-4 text-gray-800 dark:text-white flex items-center gap-2">
             Resources
           </h2>
         )}

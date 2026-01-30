@@ -349,34 +349,18 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
         setQuizzes(quizList);
 
         // Auto-select first quiz ONLY for Admin/Editors
-        if (canEdit && quizList.length > 0) {
-            const firstQuiz = quizList[0];
-            setSelectedQuiz(firstQuiz);
-            if (firstQuiz.body) {
-                try {
-                    const parsedQuestions = JSON.parse(firstQuiz.body.replace(/&quot;/g, '"'));
-                    setQuestions(parsedQuestions);
-                    setUserAnswers(new Array(parsedQuestions.length).fill(null));
-
-                    // Init selection set with all indices for first quiz
-                    const indices = new Set<number>();
-                    parsedQuestions.forEach((_: any, i: number) => indices.add(i));
-                    setSelectedQuestionIndices(indices);
-                } catch (e) {
-                    console.error("Failed to parse quiz JSON:", e);
-                    setQuestions([]);
-                }
-            }
-        } else {
-            // For students, start with no selection (Card View)
+        if (!selectedQuiz) {
             setSelectedQuiz(null);
             setQuestions([]);
         }
 
+        // Only reset view mode if we are not already viewing something valid
+        // setViewMode('list');
+
         setViewMode('list');
     }, [groupedContent, canEdit]);
 
-    const selectQuiz = (quiz: Content) => {
+    const selectQuiz = (quiz: Content, targetMode?: 'list' | 'question') => {
         setSelectedQuiz(quiz);
         setViewStats(prev => ({ ...prev!, count: 0 })); // Reset view stats for the new quiz session
         if (quiz.body) {
@@ -392,7 +376,7 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
 
                 setCurrentQuestionIndex(0);
                 // Student -> Game Mode immediately. Admin -> Study List View.
-                setViewMode(canEdit ? 'list' : 'question');
+                setViewMode(targetMode || (canEdit ? 'list' : 'question'));
             } catch (e) {
                 console.error("Failed to parse quiz JSON:", e);
                 setQuestions([]);
@@ -436,11 +420,8 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
 
     const handleBackToList = () => {
         setViewMode('list');
-        // If student, clear selection (go back to Grid).
-        // If admin, keep selection (go back to Tabs/Study View).
-        if (!canEdit) {
-            setSelectedQuiz(null);
-        }
+        // Go back to Grid for everyone
+        setSelectedQuiz(null);
     };
 
     const handleLinkContent = async (selectedItems: Content[]) => {
@@ -901,13 +882,103 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
         );
     }
 
-    // --- Admin: Tabbed Quiz View (List Mode) ---
+    // --- Admin: Grid View & Study View ---
+
+    if (!selectedQuiz) {
+        return (
+            <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900 overflow-y-auto custom-scrollbar relative p-4 sm:p-8 animate-fade-in">
+                <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-gradient-to-br from-rose-500 to-orange-500 rounded-2xl shadow-lg shadow-rose-500/20">
+                            <QuizIcon className="w-8 h-8 text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">Quizzes</h1>
+                            <p className="text-gray-500 dark:text-gray-400 font-medium">{quizzes.length} Quizzes Available</p>
+                        </div>
+                    </div>
+                    <div className="flex gap-2 items-center">
+                        {!isLoading && quizzes.length > 0 && (
+                            <button onClick={handleExportInitiate} className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm" title="Export all Quizzes to PDF">
+                                <DownloadIcon className="w-5 h-5" />
+                                <span className="hidden sm:inline">PDF</span>
+                            </button>
+                        )}
+                        {canEdit && category === 'below_average_d_plus' && (
+                            <>
+                                <button onClick={() => setPickerOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shadow-sm">
+                                    <LinkIcon className="w-5 h-5" />
+                                    <span className="hidden sm:inline">Link</span>
+                                </button>
+                                <button onClick={() => setIsCreating(true)} className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
+                                    <PlusIcon className="w-5 h-5" />
+                                    <span className="hidden sm:inline">Create</span>
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                {quizzes.length === 0 ? (
+                    <div className="text-center py-32 bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-dashed border-gray-200 dark:border-gray-700">
+                        <QuizIcon className="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
+                        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">No quizzes yet</h3>
+                        <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto mb-6">Create a new quiz or link an existing one.</p>
+                        {canEdit && category === 'below_average_d_plus' && (
+                            <div className="flex gap-3 justify-center">
+                                <button onClick={() => setPickerOpen(true)} className="px-4 py-2 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded-lg text-sm font-medium transition-colors">Link Existing</button>
+                                <button onClick={() => setIsCreating(true)} className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors border border-transparent shadow-sm">Create New</button>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-20">
+                        {quizzes.map((quiz) => {
+                            let qCount = 0;
+                            try { qCount = JSON.parse(quiz.body?.replace(/&quot;/g, '"') || '[]').length } catch (e) { }
+                            return (
+                                <div key={quiz._id} className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col h-full group relative">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="p-3 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-500 dark:text-orange-400 group-hover:bg-rose-500 group-hover:text-white transition-colors duration-300">
+                                            <QuizIcon className="w-6 h-6" />
+                                        </div>
+                                        <span className="px-3 py-1 rounded-full bg-gray-50 dark:bg-gray-700 text-xs font-bold text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-gray-600">{qCount} Qs</span>
+                                    </div>
+                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 line-clamp-2 leading-tight group-hover:text-rose-600 transition-colors cursor-pointer" onClick={() => selectQuiz(quiz, 'question')}>
+                                        {quiz.title}
+                                    </h3>
+                                    <div className="mt-auto pt-4 border-t border-gray-50 dark:border-gray-700 flex items-center gap-2">
+                                        <button onClick={() => selectQuiz(quiz, 'question')} className="flex-1 px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-300 dark:hover:bg-rose-900/40 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-1">
+                                            <span className="text-lg">▶</span> Play
+                                        </button>
+                                        <button onClick={() => selectQuiz(quiz, 'list')} className="px-3 py-2 bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 rounded-lg text-sm font-bold transition-colors flex items-center justify-center" title="Edit / Study Mode">
+                                            <EyeIcon className="w-5 h-5" />
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+
+                <ExportEmailModal isOpen={exportModalOpen} onClose={() => setExportModalOpen(false)} onExport={handleExportConfirm} isLoading={isExporting} />
+                <StandardContentPicker isOpen={pickerOpen} onClose={() => setPickerOpen(false)} onImport={handleLinkContent} lessonId={lessonId} resourceType="quiz" />
+                <div ref={exportContainerRef} style={{ position: 'fixed', top: '-10000px', left: '-10000px', width: '794px', visibility: 'visible', pointerEvents: 'none', zIndex: -9999 }} />
+                {sweetAlert.show && (<div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"> <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md p-8 transform transition-all scale-100 flex flex-col items-center text-center"> {sweetAlert.type === 'loading' && (<div className="w-16 h-16 mb-4"> <svg className="animate-spin h-16 w-16 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"> <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle> <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path> </svg> </div>)} {sweetAlert.type === 'success' && (<div className="w-16 h-16 bg-green-100 dark:bg-green-900/50 rounded-full flex items-center justify-center mb-4"> <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"> <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path> </svg> </div>)} {sweetAlert.type === 'error' && (<div className="w-16 h-16 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center mb-4"> <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"> <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path> </svg> </div>)} <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">{sweetAlert.title}</h3> <p className="text-gray-600 dark:text-gray-300 mb-6 whitespace-pre-line">{sweetAlert.message}</p> {sweetAlert.type !== 'loading' && (<button onClick={() => setSweetAlert(prev => ({ ...prev, show: false }))} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors" > சரி (OK) </button>)} </div> </div>)}
+            </div>
+        );
+    }
+
+    // --- Admin: Selected Quiz View (Study Mode) ---
     return (
         <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900 overflow-y-auto custom-scrollbar relative">
             {/* Header Section (Scrolls Away) */}
             <div className="bg-white dark:bg-gray-800 p-4 sm:px-6 shadow-sm z-10 relative">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center gap-3">
+                        <button onClick={handleBackToList} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 hover:text-rose-600 dark:text-gray-400 mr-1">
+                            <ChevronRightIcon className="w-6 h-6 rotate-180" />
+                        </button>
                         <div className="p-2 bg-rose-100 dark:bg-rose-900/30 rounded-lg">
                             <QuizIcon className="w-6 h-6 text-rose-600 dark:text-rose-400" />
                         </div>

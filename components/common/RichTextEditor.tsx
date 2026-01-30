@@ -773,23 +773,23 @@ export const RichTextEditor: React.FC<RichTextEditorProps & { hideHeader?: boole
     };
 
     return (
-        <div className={`flex flex-col ${height} bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden relative`}>
+        <div className={`flex flex-col ${height} bg-white dark:bg-black rounded-2xl shadow-lg border border-gray-100 dark:border-gray-800 overflow-hidden relative`}>
             {!hideHeader && (
-                <div className="bg-indigo-50 px-6 py-2 border-b border-indigo-100 flex justify-between items-center flex-shrink-0 gap-4 flex-wrap">
-                    <h3 className="text-lg font-bold text-indigo-900 font-tamil whitespace-nowrap">
+                <div className="bg-indigo-50 dark:bg-gray-900 px-6 py-2 border-b border-indigo-100 dark:border-gray-700 flex justify-between items-center flex-shrink-0 gap-4 flex-wrap">
+                    <h3 className="text-lg font-bold text-indigo-900 dark:text-white font-tamil whitespace-nowrap">
                         Advanced Editor
                     </h3>
                     <div className="flex items-center gap-2 flex-wrap">
                         <button
                             onClick={() => handleInsertMath(false)}
-                            className="px-3 py-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1 shadow-sm font-mono"
+                            className="px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1 shadow-sm font-mono"
                             title="Inline Math ($ ... $)"
                         >
                             <span className="text-lg leading-none mb-1">$</span> Inline
                         </button>
                         <button
                             onClick={() => handleInsertMath(true)}
-                            className="px-3 py-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1 shadow-sm"
+                            className="px-3 py-1.5 text-xs font-bold text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1 shadow-sm"
                             title="Display Math (Inline Flow)"
                         >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
@@ -798,30 +798,30 @@ export const RichTextEditor: React.FC<RichTextEditorProps & { hideHeader?: boole
 
                         <button
                             onClick={() => setShowPreview(true)}
-                            className="px-3 py-1.5 text-xs font-semibold text-purple-700 bg-white border border-purple-200 rounded-lg hover:bg-purple-50 flex items-center gap-1 shadow-sm"
+                            className="px-3 py-1.5 text-xs font-semibold text-purple-700 dark:text-purple-300 bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-800 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/30 flex items-center gap-1 shadow-sm"
                             title="Preview Content (with Math)"
                         >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                             Preview
                         </button>
 
-                        <button onClick={() => setShowHtmlInput(true)} className="px-3 py-1.5 text-xs font-semibold text-teal-700 bg-white border border-teal-200 rounded-lg hover:bg-teal-50 flex items-center gap-1">
+                        <button onClick={() => setShowHtmlInput(true)} className="px-3 py-1.5 text-xs font-semibold text-teal-700 dark:text-teal-300 bg-white dark:bg-gray-800 border border-teal-200 dark:border-teal-800 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-900/30 flex items-center gap-1">
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" /></svg>
                             Paste HTML
                         </button>
                         {onDownload && (
                             <>
-                                <button onClick={() => onDownload(SaveFormat.HTML)} className="px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-white border border-indigo-200 rounded-lg hover:bg-indigo-50 flex items-center gap-1">
+                                <button onClick={() => onDownload(SaveFormat.HTML)} className="px-3 py-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300 bg-white dark:bg-gray-800 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 flex items-center gap-1">
                                     HTML
                                 </button>
-                                <button onClick={() => onDownload(SaveFormat.DOC)} className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 flex items-center gap-1">
+                                <button onClick={() => onDownload(SaveFormat.DOC)} className="px-3 py-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 flex items-center gap-1">
                                     DOC
                                 </button>
                             </>
                         )}
 
                         {onCancel && (
-                            <button onClick={onCancel} className="ml-2 px-4 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1">
+                            <button onClick={onCancel} className="ml-2 px-4 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1">
                                 Cancel
                             </button>
                         )}
@@ -866,8 +866,8 @@ export const RichTextEditor: React.FC<RichTextEditorProps & { hideHeader?: boole
                 </div>
             )}
 
-            <div className="flex-1 bg-white overflow-hidden flex flex-col relative h-full">
-                <div ref={editorRef} className="flex-1 overflow-y-auto h-full" style={{ border: 'none' }}></div>
+            <div className="flex-1 bg-white dark:bg-black overflow-hidden flex flex-col relative h-full">
+                <div ref={editorRef} className="flex-1 overflow-y-auto h-full dark:text-white" style={{ border: 'none' }}></div>
 
                 <InsertTableModal
                     isOpen={showInsertTable}
