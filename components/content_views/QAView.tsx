@@ -3,6 +3,7 @@ import { Content, User, ResourceType, QAMetadata, QuestionType, CognitiveProcess
 import { RichTextEditor } from '../common/RichTextEditor';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
+import { trackView } from '../../services/api';
 import { QAIcon } from '../icons/ResourceTypeIcons';
 import { PlusIcon, EditIcon, TrashIcon, ChevronRightIcon, DownloadIcon, XIcon, EyeIcon, UploadCloudIcon, CollectionIcon, LinkIcon } from '../icons/AdminIcons';
 import { StandardContentPicker } from '../common/StandardContentPicker';
@@ -287,11 +288,15 @@ const QAEditorModal: React.FC<QAEditorModalProps> = ({ isOpen, onClose, onSave, 
 };
 
 // --- Import Modal Interface & Component ---
+// --- Import Modal Interface & Component ---
 interface ParsedQA {
     id: number;
     question: string;
     answer: string;
     isValid: boolean;
+    marks?: number;
+    type?: QuestionType;
+    cognitiveProcess?: CognitiveProcess;
 }
 
 const QAImportModal: React.FC<{
@@ -308,6 +313,41 @@ const QAImportModal: React.FC<{
     const [defaultMarks, setDefaultMarks] = useState(2);
     const [defaultType, setDefaultType] = useState<QuestionType>('Basic');
     const [defaultCP, setDefaultCP] = useState<CognitiveProcess>('CP1');
+
+    const extractMetadata = (content: string) => {
+        let cleanContent = content;
+        const meta: Partial<ParsedQA> = {};
+
+        // Extract Marks (e.g., Mark: 5, Marks: 5)
+        const marksMatch = cleanContent.match(/Marks?\s*[:\-]\s*(\d+)/i);
+        if (marksMatch) {
+            meta.marks = parseInt(marksMatch[1]);
+            cleanContent = cleanContent.replace(marksMatch[0], '');
+        }
+
+        // Extract Type (e.g., Type: Basic, Type: Average)
+        const typeMatch = cleanContent.match(/Type\s*[:\-]\s*(Basic|Average|Profound)/i);
+        if (typeMatch) {
+            const t = typeMatch[1].toLowerCase();
+            if (t === 'basic') meta.type = 'Basic';
+            else if (t === 'average') meta.type = 'Average';
+            else if (t === 'profound') meta.type = 'Profound';
+            cleanContent = cleanContent.replace(typeMatch[0], '');
+        }
+
+        // Extract Average/Cognitive Process (e.g., Average: CP1)
+        // User requested "Average" keyword, mapping to Cognitive Process
+        const cpMatch = cleanContent.match(/Average\s*[:\-]\s*(CP[1-7])/i);
+        if (cpMatch) {
+            const val = cpMatch[1].toUpperCase();
+            if (val.startsWith('CP') && parseInt(val.replace('CP', '')) >= 1 && parseInt(val.replace('CP', '')) <= 7) {
+                meta.cognitiveProcess = val as CognitiveProcess;
+            }
+            cleanContent = cleanContent.replace(cpMatch[0], '');
+        }
+
+        return { cleanContent, meta };
+    };
 
     const parseText = () => {
         if (!text.trim()) return;
@@ -332,11 +372,15 @@ const QAImportModal: React.FC<{
 
         const finalizeItem = () => {
             if (currentQ && currentA) {
+                // Extract metadata from Question text
+                const { cleanContent, meta } = extractMetadata(currentQ);
+
                 items.push({
                     id: ++currentId,
-                    question: currentQ.trim(),
+                    question: cleanContent.trim(),
                     answer: currentA.trim(),
-                    isValid: true
+                    isValid: true,
+                    ...meta
                 });
             }
             currentQ = '';
@@ -393,9 +437,9 @@ const QAImportModal: React.FC<{
                 title: item.question,
                 body: item.answer,
                 metadata: {
-                    marks: defaultMarks,
-                    questionType: defaultType,
-                    cognitiveProcess: defaultCP
+                    marks: item.marks ?? defaultMarks,
+                    questionType: item.type ?? defaultType,
+                    cognitiveProcess: item.cognitiveProcess ?? defaultCP
                 },
                 isPublished: true
             }));
@@ -435,13 +479,18 @@ const QAImportModal: React.FC<{
                                 <strong>Instructions:</strong> Paste your Q&A text below. Supports English and Tamil formats.<br />
                                 Examples:<br />
                                 <code>Q1. What is React?</code> ... <code>Ans: A library...</code><br />
-                                Auto-splits text based on markers: Q, Question, Ans, Answer, கேள்வி, வினா, பதில், விடை.
+                                Auto-splits text based on markers: Q, Question, Ans, Answer, கேள்வி, வினா, பதில், விடை.<br />
+                                <br />
+                                <strong>Metadata Keywords:</strong><br />
+                                <code>Mark: 5</code> (Sets marks)<br />
+                                <code>Type: Average</code> (Sets type: Basic, Average, Profound)<br />
+                                <code>Average: CP2</code> (Sets Cognitive Process: CP1-CP7)
                             </div>
                             <textarea
                                 value={text}
                                 onChange={e => setText(e.target.value)}
                                 className="flex-1 w-full p-4 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 font-mono text-sm leading-relaxed"
-                                placeholder={`Q1. Question 1 text here...\nAns: Answer text here...\n\nQ2. Question 2 text here...\nAns: Answer text here...`}
+                                placeholder={`Q1. Question 1 text here...\nMark: 2\nType: Basic\nAverage: CP1\nAns: Answer text here...\n\nQ2. Question 2 text here...\nAns: Answer text here...`}
                             />
                         </div>
                     ) : (
@@ -478,8 +527,15 @@ const QAImportModal: React.FC<{
                                     <button onClick={() => setStep('input')} className="text-indigo-600 dark:text-indigo-400 text-xs hover:underline">Edit Input</button>
                                 </h3>
                                 {parsedItems.map((item, idx) => (
-                                    <div key={idx} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-                                        <div className="font-semibold text-gray-900 dark:text-gray-100 mb-2 flex gap-2">
+                                    <div key={idx} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 relative">
+                                        {(item.marks || item.type || item.cognitiveProcess) && (
+                                            <div className="absolute top-2 right-2 flex gap-1">
+                                                {item.marks && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600">Mark: {item.marks}</span>}
+                                                {item.type && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600">Type: {item.type}</span>}
+                                                {item.cognitiveProcess && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600">CP: {item.cognitiveProcess}</span>}
+                                            </div>
+                                        )}
+                                        <div className="font-semibold text-gray-900 dark:text-gray-100 mb-2 flex gap-2 pr-20">
                                             <span className="text-indigo-500 shrink-0">Q{idx + 1}:</span>
                                             <span dangerouslySetInnerHTML={{ __html: processContentForHTML(item.question) }} />
                                         </div>
@@ -711,9 +767,16 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user, category }) => {
         message: ''
     });
 
+    const qaItems = groupedContent?.[0]?.docs || [];
+
     useEffect(() => {
         const updateStats = async () => {
             try {
+                // Track view
+                if (lessonId && !isLoading && qaItems.length > 0) {
+                    trackView(lessonId, 'qa').catch(err => console.error('Error tracking view:', err));
+                }
+
                 const h = await api.getHierarchy(lessonId);
                 setStats({ downloads: h.qaDownloadCount || 0 });
             } catch (e) {
@@ -721,9 +784,7 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user, category }) => {
             }
         };
         updateStats();
-    }, [lessonId]);
-
-    const qaItems = groupedContent?.[0]?.docs || [];
+    }, [lessonId, isLoading, qaItems.length > 0]);
     const resourceType: ResourceType = 'qa';
     const canEdit = user.role === 'admin' || !!user.canEdit;
 

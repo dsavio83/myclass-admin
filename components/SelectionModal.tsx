@@ -43,7 +43,9 @@ const Selector: React.FC<{
       >
         <option value="" disabled>{isLoading ? 'Loading...' : `Select ${label}`}</option>
         {options?.map(opt => (
-          <option key={opt._id} value={opt._id}>{opt.name}</option>
+          <option key={opt._id} value={opt._id}>
+            {opt.name} {(opt as any).viewCount > 0 ? `(${(opt as any).viewCount} views)` : ''}
+          </option>
         ))}
       </select>
       <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">

@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
+import { trackView } from '../../services/api';
 import { SlideIcon } from '../icons/ResourceTypeIcons';
-import { TrashIcon, UploadCloudIcon, ExpandIcon, SaveIcon, ChevronLeftIcon, ChevronRightIcon, EyeIcon, CheckCircleIcon } from '../icons/AdminIcons';
+import { TrashIcon, DownloadIcon, EyeIcon, UploadCloudIcon, ExpandIcon, SaveIcon, ChevronLeftIcon, ChevronRightIcon, CheckCircleIcon } from '../icons/AdminIcons';
 import { CloseIcon } from '../icons/ToastIcons';
 import { ConfirmModal } from '../ConfirmModal';
 import { PdfViewer } from './PdfViewer';
@@ -11,7 +12,7 @@ import { useToast } from '../../context/ToastContext';
 import { ContentStatusBanner } from '../common/ContentStatusBanner';
 import { formatCount } from '../../utils/formatUtils';
 import { useContentUpdate } from '../../context/ContentUpdateContext';
-import { useBackgroundTask } from '../../context/BackgroundTaskContext'; // Added
+import { useBackgroundTask } from '../../context/BackgroundTaskContext';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Configure worker - using local worker file with CDN fallback
@@ -336,7 +337,7 @@ const PdfPage: React.FC<{ pdfDoc: any; pageNum: number; scale: number; rotation?
             try {
                 if (renderTaskRef.current) renderTaskRef.current.cancel();
                 const page = await pdfDoc.getPage(pageNum);
-                const viewport = page.getViewport({ scale, rotation });
+                const viewport = page.getViewport({ scale, rotation: rotation || undefined });
                 const canvas = canvasRef.current;
                 const context = canvas.getContext('2d');
                 if (context) {
@@ -380,7 +381,7 @@ const RunningPdfViewer: React.FC<{ url: string; onPdfLoad: (pdf: any) => void; i
         const calculateScale = () => {
             if (!pdfDoc || !containerRef.current) return;
             pdfDoc.getPage(1).then((page: any) => {
-                const viewport = page.getViewport({ scale: 1.0, rotation });
+                const viewport = page.getViewport({ scale: 1.0, rotation: rotation || undefined });
                 const containerWidth = containerRef.current?.clientWidth || window.innerWidth;
                 setScale(containerWidth / viewport.width);
             });
@@ -594,7 +595,7 @@ const SavedSlideViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
                     onDoubleClick={handleDoubleClick}
                     title={isMobile ? "Double-click to view in fullscreen" : "View in Fullscreen"}
                 >
-                    <RunningPdfViewer url={pdfUrl} onPdfLoad={() => { }} />
+                    <RunningPdfViewer url={pdfUrl} onPdfLoad={() => { }} isMobile={isMobile} />
 
                     {/* Hover hint - Mobile only */}
                     {isMobile && (
@@ -816,9 +817,12 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
     );
 };
 
+
 export const SlideView: React.FC<SlideViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
     const { triggerContentUpdate, updateVersion } = useContentUpdate();
+    const [fullscreenUrl, setFullscreenUrl] = useState<string | null>(null);
+    const [fullscreenMode, setFullscreenMode] = useState(false);
 
     useEffect(() => {
         console.log('[SlideView] LessonId changed:', lessonId);
@@ -836,11 +840,24 @@ export const SlideView: React.FC<SlideViewProps> = ({ lessonId, user }) => {
     }, [groupedContent]);
 
     const [confirmModalState, setConfirmModalState] = useState<{ isOpen: boolean; onConfirm: (() => void) | null }>({ isOpen: false, onConfirm: null });
-    const [fullscreenMode, setFullscreenMode] = useState(false);
     const { showToast } = useToast();
 
     const slideContent = groupedContent?.[0]?.docs[0];
     const canEdit = user.role === 'admin' || !!user.canEdit;
+
+    // Track view when slide content is loaded
+    useEffect(() => {
+        if (lessonId && !isLoading && slideContent?._id) {
+            trackView(lessonId, 'slide', slideContent._id).catch(err => console.error('Error tracking view:', err));
+        }
+    }, [lessonId, isLoading, slideContent?._id]);
+
+    const handleView = (url: string, id: string) => {
+        setFullscreenUrl(url);
+        if (lessonId) {
+            trackView(lessonId, 'slide', id).catch(err => console.error('Error tracking view:', err));
+        }
+    };
 
     const handleDelete = (contentId: string) => {
         const confirmAction = async () => {

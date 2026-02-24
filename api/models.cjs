@@ -59,6 +59,7 @@ const lessonSchema = new mongoose.Schema({
     // PDF View Counts (Specific for Question & Worksheet)
     worksheetPdfViewCount: { type: Number, default: 0 },
     questionPaperPdfViewCount: { type: Number, default: 0 },
+    viewCount: { type: Number, default: 0 }, // Total views across all content types
 
     // Download Counts
     notesDownloadCount: { type: Number, default: 0 },
@@ -157,6 +158,21 @@ downloadLogSchema.index({ userId: 1, downloadedAt: -1 });
 downloadLogSchema.index({ downloadStatus: 1, downloadedAt: -1 });
 downloadLogSchema.index({ contentType: 1 });
 
+// ViewLog Schema for detailed view tracking
+const viewLogSchema = new mongoose.Schema({
+    contentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Content' },
+    lessonId: { type: mongoose.Schema.Types.ObjectId, ref: 'Lesson' },
+    contentType: { type: String, required: true },
+    viewedAt: { type: Date, default: Date.now },
+    ipAddress: { type: String },
+    userAgent: { type: String }
+}, { timestamps: true });
+
+// Indexes for analytics queries
+viewLogSchema.index({ viewedAt: -1 });
+viewLogSchema.index({ contentType: 1 });
+viewLogSchema.index({ lessonId: 1 });
+
 module.exports = {
     User: mongoose.model('User', userSchema),
     Class: mongoose.model('Class', classSchema),
@@ -167,5 +183,6 @@ module.exports = {
     Content: mongoose.model('Content', contentSchema),
     Webmaster: mongoose.model('Webmaster', webmasterSchema),
     Download: mongoose.model('Download', downloadSchema),
-    DownloadLog: mongoose.model('DownloadLog', downloadLogSchema)
+    DownloadLog: mongoose.model('DownloadLog', downloadLogSchema),
+    ViewLog: mongoose.model('ViewLog', viewLogSchema)
 };

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, QuizQuestion, AnswerOption, Content } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
+import { trackView } from '../../services/api';
 import { QuizIcon } from '../icons/ResourceTypeIcons';
 import { ChevronRightIcon, EyeIcon, CheckCircleIcon, DownloadIcon, XIcon, LinkIcon, PlusIcon } from '../icons/AdminIcons';
 import { StandardContentPicker } from '../common/StandardContentPicker';
@@ -335,6 +336,11 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
     useEffect(() => {
         const updateStats = async () => {
             try {
+                // Track view
+                if (lessonId && !isLoading && quizzes.length > 0) {
+                    trackView(lessonId, 'quiz').catch(err => console.error('Error tracking view:', err));
+                }
+
                 const h = await api.getHierarchy(lessonId);
                 setViewStats({ count: 0, downloads: h.quizDownloadCount || 0 });
             } catch (e) {
@@ -342,7 +348,7 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
             }
         };
         updateStats();
-    }, [lessonId]);
+    }, [lessonId, isLoading, quizzes.length > 0]);
 
     useEffect(() => {
         const quizList = groupedContent?.[0]?.docs || [];

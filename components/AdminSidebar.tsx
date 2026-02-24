@@ -18,6 +18,7 @@ const allManagementLinks = [
     { id: 'downloads', label: 'Download Logs', roles: ['admin'] },
     { id: 'teacher-requests', label: 'Teacher Requests', roles: ['admin'] },
     { id: 'reports', label: 'Reports', roles: ['admin', 'teacher'] },
+    { id: 'analytics', label: 'Analytics', roles: ['admin', 'teacher'] },
 ];
 
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({ isOpen, activePage, setActivePage, userRole }) => {

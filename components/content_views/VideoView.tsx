@@ -5,6 +5,7 @@ import { useBackgroundMedia } from '../../context/BackgroundMediaContext'; // Ad
 import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
+import { trackView } from '../../services/api';
 import { VideoIcon } from '../icons/ResourceTypeIcons';
 import { TrashIcon, UploadCloudIcon, PlusIcon, EyeIcon, LinkIcon } from '../icons/AdminIcons';
 import { StandardContentPicker } from '../common/StandardContentPicker';
@@ -60,7 +61,7 @@ const getYouTubeEmbedUrl = (raw: string | undefined | null): string | null => {
     }
 };
 
-const SavedVideoViewer: React.FC<{ content: Content; onRemove: () => void; isAdmin: boolean; onTogglePublish?: (item: Content) => void }> = ({ content, onRemove, isAdmin, onTogglePublish }) => {
+const SavedVideoViewer: React.FC<{ content: Content; onRemove: () => void; isAdmin: boolean; onTogglePublish?: (item: Content) => void; lessonId: string }> = ({ content, onRemove, isAdmin, onTogglePublish, lessonId }) => {
     const [videoError, setVideoError] = useState<string | null>(null);
     const [videoLoading, setVideoLoading] = useState(true);
     const [videoSrc, setVideoSrc] = useState<string>('');
@@ -214,8 +215,10 @@ const SavedVideoViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
 
     // Increment view count on mount
     useEffect(() => {
-        // View count increment removed
-    }, [content._id]);
+        if (content._id && lessonId) {
+            trackView(lessonId, 'video', content._id).catch(err => console.error('Error tracking view:', err));
+        }
+    }, [content._id, lessonId]);
 
     const handleVideoLoad = () => {
         console.log('[VideoView] Video loading started');
@@ -819,6 +822,7 @@ export const VideoView: React.FC<VideoViewProps> = ({ lessonId, user, category }
                                             onRemove={() => handleDelete(video._id)}
                                             isAdmin={canEdit}
                                             onTogglePublish={handleTogglePublish}
+                                            lessonId={lessonId}
                                         />
                                     )}
                                 </React.Fragment>

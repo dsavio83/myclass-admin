@@ -4,6 +4,7 @@ import { formatCount } from '../../utils/formatUtils';
 import { Content, User, ResourceType } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
+import { trackView } from '../../services/api';
 import { NotesIcon } from '../icons/ResourceTypeIcons';
 import { PlusIcon, EditIcon, TrashIcon, DownloadIcon, XIcon, EyeIcon } from '../icons/AdminIcons';
 import { PublishToggle } from '../common/PublishToggle';
@@ -198,6 +199,11 @@ export const NotesView: React.FC<NotesViewProps> = ({ lessonId, user, category }
     useEffect(() => {
         const updateStats = async () => {
             try {
+                // Track view
+                if (lessonId && !isLoading && notes.length > 0) {
+                    trackView(lessonId, 'notes').catch(err => console.error('Error tracking view:', err));
+                }
+
                 const h = await api.getHierarchy(lessonId);
                 // Only keep download count
                 setStats({ downloads: h.notesDownloadCount || 0 });
@@ -206,7 +212,7 @@ export const NotesView: React.FC<NotesViewProps> = ({ lessonId, user, category }
             }
         };
         updateStats();
-    }, [lessonId]);
+    }, [lessonId, isLoading, notes.length > 0]);
 
     const handleSave = async (body: string, isPublished: boolean) => {
         try {

@@ -57,7 +57,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ url, initialScale = 1.0 })
         const checkMobile = () => {
             setIsMobile(window.innerWidth < 768);
         };
-        
+
         checkMobile();
         window.addEventListener('resize', checkMobile);
         return () => window.removeEventListener('resize', checkMobile);

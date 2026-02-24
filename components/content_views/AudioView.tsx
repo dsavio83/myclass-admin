@@ -5,6 +5,7 @@ import { useBackgroundMedia } from '../../context/BackgroundMediaContext';
 import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
+import { trackView } from '../../services/api';
 import { AudioIcon } from '../icons/ResourceTypeIcons';
 import { TrashIcon, UploadCloudIcon, PlusIcon, PlayIcon, PauseIcon, SpeakerIcon, SpeakerMuteIcon, EyeIcon, CheckCircleIcon, LinkIcon } from '../icons/AdminIcons';
 import { StandardContentPicker } from '../common/StandardContentPicker';
@@ -302,7 +303,7 @@ const CustomAudioPlayer: React.FC<{ src: string; title: string; id: string }> = 
     );
 };
 
-const SavedAudioViewer: React.FC<{ content: Content; onRemove: () => void; isAdmin: boolean; onTogglePublish?: (item: Content) => void }> = ({ content, onRemove, isAdmin, onTogglePublish }) => {
+const SavedAudioViewer: React.FC<{ content: Content; onRemove: () => void; isAdmin: boolean; onTogglePublish?: (item: Content) => void; lessonId: string }> = ({ content, onRemove, isAdmin, onTogglePublish, lessonId }) => {
     const [audioError, setAudioError] = useState<string | null>(null);
     const [audioSrc, setAudioSrc] = useState<string>('');
 
@@ -326,8 +327,10 @@ const SavedAudioViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
 
     // Increment view count on mount
     useEffect(() => {
-        // View count increment logic removed
-    }, [content._id]);
+        if (content._id && lessonId) {
+            trackView(lessonId, 'audio', content._id).catch(err => console.error('Error tracking view:', err));
+        }
+    }, [content._id, lessonId]);
 
     return (
         <div className="relative group">
@@ -741,7 +744,7 @@ export const AudioView: React.FC<AudioViewProps> = ({ lessonId, user, category }
                     {!isLoading && !showAddForm && audioContents.length > 0 && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
                             {audioContents.map(audio => (
-                                <SavedAudioViewer key={audio._id} content={audio} onRemove={() => handleDelete(audio._id)} isAdmin={canEdit} onTogglePublish={handleTogglePublish} />
+                                <SavedAudioViewer key={audio._id} content={audio} onRemove={() => handleDelete(audio._id)} isAdmin={canEdit} onTogglePublish={handleTogglePublish} lessonId={lessonId} />
                             ))}
                         </div>
                     )}

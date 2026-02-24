@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useContentUpdate } from '../../context/ContentUpdateContext';
-import { useBackgroundTask } from '../../context/BackgroundTaskContext'; // Added
+import { useBackgroundTask } from '../../context/BackgroundTaskContext';
 import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
+import { trackView } from '../../services/api';
 import { QuestionPaperIcon } from '../icons/ResourceTypeIcons';
 import { TrashIcon, UploadCloudIcon, PlusIcon, DownloadIcon, EyeIcon, XIcon, LinkIcon, CheckCircleIcon } from '../icons/AdminIcons';
 import { ConfirmModal } from '../ConfirmModal';
 import { PdfViewer } from './PdfViewer';
 import { useToast } from '../../context/ToastContext';
-import '../../worksheet-styles.css';
 import { formatCount } from '../../utils/formatUtils';
 import { ContentStatusBanner } from '../common/ContentStatusBanner';
 
@@ -267,6 +267,7 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onCancel: (
     );
 };
 
+
 export const QuestionPaperView: React.FC<QuestionPaperViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
     const [showUploadForm, setShowUploadForm] = useState(false);
@@ -417,7 +418,9 @@ export const QuestionPaperView: React.FC<QuestionPaperViewProps> = ({ lessonId, 
 
     const handleView = async (url: string, id: string) => {
         setFullscreenUrl(url);
-        // View count increment removed as per request
+        if (lessonId) {
+            trackView(lessonId, 'questionPaper', id).catch(err => console.error('Error tracking view:', err));
+        }
     };
 
     return (

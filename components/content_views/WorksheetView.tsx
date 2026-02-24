@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Content, User } from '../../types';
 import { useApi } from '../../hooks/useApi';
-import { useBackgroundTask } from '../../context/BackgroundTaskContext'; // Added
+import { useBackgroundTask } from '../../context/BackgroundTaskContext';
 import * as api from '../../services/api';
+import { trackView } from '../../services/api';
 import { WorksheetIcon } from '../icons/ResourceTypeIcons';
 import { TrashIcon, UploadCloudIcon, PlusIcon, DownloadIcon, EyeIcon, XIcon, LinkIcon, CheckCircleIcon } from '../icons/AdminIcons';
 import { ConfirmModal } from '../ConfirmModal';
 import { PdfViewer } from './PdfViewer';
 import { useToast } from '../../context/ToastContext';
+import { useContentUpdate } from '../../context/ContentUpdateContext';
 import '../../worksheet-styles.css';
 import { formatCount } from '../../utils/formatUtils';
 
@@ -267,7 +269,6 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onCancel: (
     );
 };
 
-import { useContentUpdate } from '../../context/ContentUpdateContext';
 
 export const WorksheetView: React.FC<WorksheetViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
@@ -420,7 +421,11 @@ export const WorksheetView: React.FC<WorksheetViewProps> = ({ lessonId, user }) 
             }
         }
         setFullscreenUrl(finalUrl);
-        // View count increment removed
+
+        // Track view
+        if (lessonId) {
+            trackView(lessonId, 'worksheet', id).catch(err => console.error('Error tracking view:', err));
+        }
     };
 
     return (

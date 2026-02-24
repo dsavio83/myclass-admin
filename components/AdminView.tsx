@@ -11,6 +11,7 @@ import { ReportsPage } from './ReportsPage';
 import { BelowAveragePage } from './BelowAveragePage';
 import { ProfilePage } from './ProfilePage';
 import { AdminCollectionsPanel } from './AdminCollectionsPanel';
+import AnalyticsPage from './AnalyticsPage';
 import { ResourceType } from '../types';
 import { ContentDisplay } from './ContentDisplay';
 import { useSession } from '../context/SessionContext';
@@ -243,6 +244,8 @@ export const AdminView: React.FC = () => {
                 return isFullAdmin ? <TeacherRequests /> : <div className="p-8 text-center">Access Denied</div>;
             case 'reports':
                 return <ReportsPage />;
+            case 'analytics':
+                return <AnalyticsPage />;
             default:
                 return <ManagementPage title={state.activePage} />;
         }

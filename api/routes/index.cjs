@@ -8,7 +8,141 @@ const axios = require('axios');
 const nodemailer = require('nodemailer');
 const router = express.Router();
 require('dotenv').config({ path: path.join(__dirname, '../.env') }); // Ensure env vars are loaded
-const { User, Class, Subject, Unit, SubUnit, Lesson, Content, Webmaster, Download, DownloadLog } = require('../models.cjs');
+const { User, Class, Subject, Unit, SubUnit, Lesson, Content, Webmaster, Download, DownloadLog, ViewLog } = require('../models.cjs');
+
+// --- View Tracking Endpoints ---
+
+// Record a content view
+router.post('/track-view', async (req, res) => {
+    try {
+        const { contentId, lessonId, type } = req.body;
+
+        if (!lessonId || !type) {
+            return res.status(400).json({ message: 'lessonId and type are required' });
+        }
+
+        // 1. Increment Lesson level view count
+        const lessonUpdate = {};
+        lessonUpdate[`${type}ViewCount`] = 1;
+        lessonUpdate[`viewCount`] = 1; // Increment total view count too
+        await Lesson.findByIdAndUpdate(lessonId, { $inc: lessonUpdate });
+
+        // 2. Increment Content level view count if contentId is provided
+        if (contentId && mongoose.Types.ObjectId.isValid(contentId)) {
+            await Content.findByIdAndUpdate(contentId, { $inc: { viewCount: 1 } });
+        }
+
+        // 3. Log the view event
+        const logEntry = new ViewLog({
+            contentId: contentId && mongoose.Types.ObjectId.isValid(contentId) ? contentId : null,
+            lessonId: lessonId,
+            contentType: type,
+            ipAddress: req.ip,
+            userAgent: req.headers['user-agent']
+        });
+        await logEntry.save();
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('View tracking error:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// Get analytics data
+router.get('/analytics', async (req, res) => {
+    try {
+        const { range } = req.query; // 'day', 'week', 'month', 'total'
+
+        let startDate = new Date(0); // Default to total (all time)
+        const now = new Date();
+
+        if (range === 'day') {
+            startDate = new Date(now.setHours(0, 0, 0, 0));
+        } else if (range === 'week') {
+            startDate = new Date(now.setDate(now.getDate() - 7));
+        } else if (range === 'month') {
+            startDate = new Date(now.setMonth(now.getMonth() - 1));
+        }
+
+        // Aggregate views by Lesson/Chapter
+        const topLessons = await ViewLog.aggregate([
+            { $match: { viewedAt: { $gte: startDate } } },
+            { $group: { _id: '$lessonId', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 20 },
+            {
+                $lookup: {
+                    from: 'lessons',
+                    localField: '_id',
+                    foreignField: '_id',
+                    as: 'lessonInfo'
+                }
+            },
+            { $unwind: '$lessonInfo' },
+            {
+                $project: {
+                    _id: 1,
+                    count: 1,
+                    name: '$lessonInfo.name'
+                }
+            }
+        ]);
+
+        // Aggregate views by Content Type
+        const byType = await ViewLog.aggregate([
+            { $match: { viewedAt: { $gte: startDate } } },
+            { $group: { _id: '$contentType', count: { $sum: 1 } } },
+            { $sort: { count: -1 } }
+        ]);
+
+        // Aggregate views by Content Title
+        const topContent = await ViewLog.aggregate([
+            { $match: { viewedAt: { $gte: startDate }, contentId: { $ne: null } } },
+            { $group: { _id: '$contentId', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 20 },
+            {
+                $lookup: {
+                    from: 'contents',
+                    localField: '_id',
+                    foreignField: '_id',
+                    as: 'contentInfo'
+                }
+            },
+            { $unwind: '$contentInfo' },
+            {
+                $project: {
+                    _id: 1,
+                    count: 1,
+                    title: '$contentInfo.title',
+                    type: '$contentInfo.type'
+                }
+            }
+        ]);
+
+        const recentViews = await ViewLog.find({ viewedAt: { $gte: startDate } })
+            .sort({ viewedAt: -1 })
+            .limit(20);
+
+        const totalViews = await ViewLog.countDocuments({ viewedAt: { $gte: startDate } });
+
+        res.json({
+            range,
+            topLessons,
+            topContent,
+            byType: byType.reduce((acc, curr) => {
+                acc[curr._id] = curr.count;
+                return acc;
+            }, {}),
+            recentViews,
+            totalViews
+        });
+    } catch (error) {
+        console.error('Analytics error:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
 const { v2: cloudinary } = require('cloudinary');
 // const { CloudinaryStorage } = require('multer-storage-cloudinary');
 

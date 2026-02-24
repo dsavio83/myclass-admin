@@ -374,3 +374,14 @@ export const approveTeacherRequest = (userId: string): Promise<{ success: boolea
 
 export const rejectTeacherRequest = (userId: string): Promise<{ success: boolean; message: string }> =>
     apiRequest(`/user/reject-teacher/${userId}`, { method: 'POST' });
+
+// --- View Tracking ---
+
+export const trackView = (lessonId: string, type: ResourceType, contentId?: string): Promise<{ success: boolean }> =>
+    apiRequest('/track-view', {
+        method: 'POST',
+        body: JSON.stringify({ lessonId, type, contentId })
+    });
+
+export const getViewAnalytics = (range: 'day' | 'week' | 'month' | 'total' = 'total'): Promise<import('../types').AnalyticsData> =>
+    apiRequest(`/analytics?range=${range}`);

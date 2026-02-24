@@ -53,6 +53,7 @@ export interface Lesson {
   subUnitId: string;
   name: string;
   isPublished?: boolean;
+  viewCount?: number;
 }
 
 export type ResourceType = 'book' | 'flashcard' | 'notes' | 'qa' | 'activity' | 'video' | 'audio' | 'worksheet' | 'questionPaper' | 'quiz' | 'slide' | 'below_average';
@@ -194,6 +195,31 @@ export enum SaveFormat {
 
 // Changed to number to support pixel values.
 export type FontSize = number;
+
+export interface AnalyticsData {
+  range: 'day' | 'week' | 'month' | 'total';
+  topLessons: {
+    _id: string;
+    count: number;
+    name: string;
+  }[];
+  topContent: {
+    _id: string;
+    count: number;
+    title: string;
+    type: ResourceType;
+  }[];
+  byType: ResourceCounts;
+  totalViews: number;
+  recentViews: {
+    _id: string;
+    contentId: string | null;
+    lessonId: string;
+    contentType: string;
+    viewedAt: string;
+    ipAddress: string;
+  }[];
+}
 
 export interface Session {
   user: User | null;

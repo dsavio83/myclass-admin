@@ -3,8 +3,9 @@ import { ResourceType, ResourceCounts } from '../types';
 import { useApi } from '../hooks/useApi';
 import { getCountsByLessonId } from '../services/api';
 import { RESOURCE_TYPES } from '../constants';
-
+import { EyeIcon } from './icons/AdminIcons';
 import { useContentUpdate } from '../context/ContentUpdateContext';
+import * as api from '../services/api';
 
 interface ResourceIconStripProps {
   lessonId: string | null;
@@ -52,6 +53,11 @@ export const ResourceIconStrip: React.FC<ResourceIconStripProps> = ({
   collapsed = false,
 }) => {
   const { updateVersion } = useContentUpdate();
+  const { data: hierarchyData } = useApi<any>(
+    () => api.getHierarchy(lessonId!),
+    [lessonId, updateVersion],
+    !!lessonId
+  );
   const { data: counts } = useApi<ResourceCounts>(
     () => getCountsByLessonId(lessonId!),
     [lessonId, updateVersion],
@@ -62,6 +68,7 @@ export const ResourceIconStrip: React.FC<ResourceIconStripProps> = ({
     <div className="flex flex-col gap-1.5">
       {RESOURCE_TYPES.map(r => {
         const count = counts?.[r.key] || 0;
+        const viewCount = hierarchyData ? (hierarchyData as any)[`${r.key}ViewCount`] || 0 : 0;
         const isSelected = selectedType === r.key;
         return (
           <button
@@ -78,7 +85,7 @@ export const ResourceIconStrip: React.FC<ResourceIconStripProps> = ({
                 : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
               }
             `}
-            title={collapsed ? `${r.label} (${count})` : ''}
+            title={collapsed ? `${r.label} (Items: ${count}, Views: ${viewCount})` : ''}
             aria-pressed={isSelected}
             disabled={!lessonId}
             style={{ opacity: !lessonId ? 0.5 : 1, cursor: !lessonId ? 'not-allowed' : 'pointer' }}
@@ -92,9 +99,17 @@ export const ResourceIconStrip: React.FC<ResourceIconStripProps> = ({
 
             {!collapsed && (
               <>
-                <span className={`text-sm font-bold flex-1 text-left tracking-wide ${isSelected ? 'text-white' : 'text-gray-700 dark:text-gray-300'}`}>
-                  {r.label}
-                </span>
+                <div className="flex flex-col flex-1 text-left">
+                  <span className={`text-sm font-bold tracking-wide ${isSelected ? 'text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                    {r.label}
+                  </span>
+                  {viewCount > 0 && (
+                    <span className={`text-[10px] flex items-center gap-1 font-medium ${isSelected ? 'text-blue-100' : 'text-gray-400'}`}>
+                      <EyeIcon className="w-3 h-3" />
+                      {viewCount} views
+                    </span>
+                  )}
+                </div>
                 {count > 0 && (
                   <span className={`
                     ml-2 px-2 py-0.5 text-[11px] font-extrabold rounded-full shadow-sm min-w-[20px] text-center
@@ -121,7 +136,7 @@ export const ResourceIconStrip: React.FC<ResourceIconStripProps> = ({
 
             {collapsed && (
               <div className="absolute left-full top-1/2 ml-3 -translate-y-1/2 px-3 py-1.5 bg-gray-900 text-white text-xs font-semibold rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50 shadow-xl">
-                {r.label}
+                {r.label} {viewCount > 0 ? `(${viewCount} views)` : ''}
                 {/* Little triangle pointer */}
                 <div className="absolute top-1/2 -left-1 -mt-1 border-4 border-transparent border-r-gray-900"></div>
               </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Content, User, ResourceType } from '../../types';
 import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
+import { trackView } from '../../services/api';
 import { FlashcardIcon } from '../icons/ResourceTypeIcons';
 import { PlusIcon, EditIcon, TrashIcon, ImportIcon, ChevronRightIcon, ChevronLeftIcon, EyeIcon, CollectionIcon } from '../icons/AdminIcons';
 import { PublishToggle } from '../common/PublishToggle';
@@ -402,13 +403,16 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
         updateStats();
     }, [lessonId]);
 
-    const [currentCardIndex, setCurrentCardIndex] = useState(0);
+    const flashcards = useMemo(() => groupedContent?.[0]?.docs || [], [groupedContent]);
 
     // Increment view count for the current card
-    // Increment view count for the current card - REMOVED
     useEffect(() => {
-        // View count increment logic removed
-    }, [currentCardIndex, groupedContent]);
+        if (lessonId && !isLoading && flashcards.length > 0) {
+            trackView(lessonId, 'flashcard').catch(err => console.error('Error tracking view:', err));
+        }
+    }, [lessonId, isLoading, flashcards.length > 0]);
+
+    const [currentCardIndex, setCurrentCardIndex] = useState(0);
     const [showThankYou, setShowThankYou] = useState(false);
 
     const [frontTheme, setFrontTheme] = useState<{ bg: string, textClass: string, borderClass: string }>(getFrontTheme);
@@ -419,8 +423,6 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
     const [importModalOpen, setImportModalOpen] = useState(false);
     const [manageModalOpen, setManageModalOpen] = useState(false);
     const { showToast } = useToast();
-
-    const flashcards = useMemo(() => groupedContent?.[0]?.docs || [], [groupedContent]);
     const resourceType: ResourceType = 'flashcard';
     const canEdit = user.role === 'admin' || !!user.canEdit;
 
