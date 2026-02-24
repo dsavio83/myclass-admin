@@ -7,7 +7,7 @@ import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
 import { trackView } from '../../services/api';
 import { AudioIcon } from '../icons/ResourceTypeIcons';
-import { TrashIcon, UploadCloudIcon, PlusIcon, PlayIcon, PauseIcon, SpeakerIcon, SpeakerMuteIcon, EyeIcon, CheckCircleIcon, LinkIcon } from '../icons/AdminIcons';
+import { TrashIcon, UploadCloudIcon, PlusIcon, PlayIcon, PauseIcon, SpeakerIcon, SpeakerMuteIcon, CheckCircleIcon, LinkIcon, XIcon } from '../icons/AdminIcons';
 import { StandardContentPicker } from '../common/StandardContentPicker';
 import { ConfirmModal } from '../ConfirmModal';
 import { useToast } from '../../context/ToastContext';
@@ -21,7 +21,7 @@ interface AudioViewProps {
 }
 
 // Custom Audio Player with Visualizer
-const CustomAudioPlayer: React.FC<{ src: string; title: string; id: string }> = ({ src, title, id }) => {
+const CustomAudioPlayer: React.FC<{ src: string; title: string; id: string; colorScheme: any }> = ({ src, title, id, colorScheme }) => {
     const audioRef = useRef<HTMLAudioElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -50,7 +50,6 @@ const CustomAudioPlayer: React.FC<{ src: string; title: string; id: string }> = 
         }
 
         const initAudio = () => {
-            // ... existing initAudio logic
             if (!audioContext) {
                 try {
                     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -70,7 +69,7 @@ const CustomAudioPlayer: React.FC<{ src: string; title: string; id: string }> = 
 
         const handlePlay = () => {
             setIsPlaying(true);
-            closeMedia(); // Ensure external media stops
+            closeMedia();
             initAudio();
         };
 
@@ -86,7 +85,6 @@ const CustomAudioPlayer: React.FC<{ src: string; title: string; id: string }> = 
         audio.addEventListener('loadedmetadata', handleLoadedMetadata);
         audio.addEventListener('ended', handleEnded);
 
-        // Cleanup: Send to background
         return () => {
             if (audio && !audio.paused && !audio.ended && audio.currentTime > 0) {
                 playMedia({
@@ -107,7 +105,7 @@ const CustomAudioPlayer: React.FC<{ src: string; title: string; id: string }> = 
             audio.removeEventListener('ended', handleEnded);
             if (animationRef.current) cancelAnimationFrame(animationRef.current);
         };
-    }, [src, audioContext]);
+    }, [src, audioContext, id, title, playMedia, closeMedia, mediaState]);
 
     // Visualizer Loop
     useEffect(() => {
@@ -134,16 +132,13 @@ const CustomAudioPlayer: React.FC<{ src: string; title: string; id: string }> = 
             let x = 0;
 
             for (let i = 0; i < bufferLength; i++) {
-                barHeight = dataArray[i] / 2; // Scale down
+                barHeight = dataArray[i] / 2;
 
-                // Gradient color based on frequency
                 const gradient = ctx.createLinearGradient(0, height - barHeight, 0, height);
-                gradient.addColorStop(0, '#60A5FA'); // Light blue
-                gradient.addColorStop(1, '#2563EB'); // Blue
+                gradient.addColorStop(0, colorScheme.accent);
+                gradient.addColorStop(1, colorScheme.primary);
 
                 ctx.fillStyle = gradient;
-
-                // Rounded tops
                 ctx.beginPath();
                 ctx.roundRect(x, height - barHeight, barWidth, barHeight, [4, 4, 0, 0]);
                 ctx.fill();
@@ -162,7 +157,7 @@ const CustomAudioPlayer: React.FC<{ src: string; title: string; id: string }> = 
         return () => {
             if (animationRef.current) cancelAnimationFrame(animationRef.current);
         };
-    }, [analyser, isPlaying]);
+    }, [analyser, isPlaying, colorScheme]);
 
     const togglePlay = () => {
         if (!audioRef.current) return;
@@ -213,397 +208,209 @@ const CustomAudioPlayer: React.FC<{ src: string; title: string; id: string }> = 
     };
 
     return (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden border border-gray-100 dark:border-gray-700">
-            {/* Visualizer Area */}
-            <div className="relative h-32 bg-gray-900 flex items-center justify-center overflow-hidden">
-                <canvas
-                    ref={canvasRef}
-                    width={600}
-                    height={128}
-                    className="absolute bottom-0 w-full h-full opacity-80"
-                />
-                {!isPlaying && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm transition-opacity z-10">
-                        <button
-                            onClick={togglePlay}
-                            className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg hover:scale-110 transition-transform"
-                        >
-                            <PlayIcon className="w-8 h-8 ml-1" />
+        <div className="w-full flex flex-col">
+            <div className={`relative h-28 bg-gray-900 rounded-t-xl overflow-hidden`}>
+                <div className={`absolute inset-0 bg-gradient-to-br ${colorScheme.gradient} opacity-20`}></div>
+                <canvas ref={canvasRef} width={600} height={112} className="absolute bottom-0 w-full h-full opacity-60" />
+
+                <div className="absolute inset-0 flex items-center justify-center bg-black/10 backdrop-blur-[1px] group-hover:bg-black/20 transition-all">
+                    {!isPlaying && (
+                        <button onClick={togglePlay} className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-xl hover:scale-110 transition-transform ${colorScheme.button}`}>
+                            <PlayIcon className="w-7 h-7 ml-1" />
                         </button>
-                    </div>
-                )}
-                <div className="absolute top-4 left-4 right-4 text-white text-shadow-md truncate font-medium z-10 pointer-events-none">
-                    {title}
+                    )}
                 </div>
             </div>
 
-            {/* Controls Area */}
-            <div className="p-4 space-y-4">
-                {/* Progress Bar */}
-                <div className="flex items-center gap-3 text-xs font-mono text-gray-500 dark:text-gray-400">
+            <div className="p-4 bg-white dark:bg-gray-800 rounded-b-xl border-x border-b border-gray-100 dark:border-gray-700 space-y-3">
+                <div className="flex items-center gap-3 text-[10px] font-bold font-mono text-gray-400">
                     <span className="w-10 text-right">{formatTime(currentTime)}</span>
-                    <input
-                        type="range"
-                        min="0"
-                        max={duration || 0}
-                        value={currentTime}
-                        onChange={handleSeek}
-                        className="flex-1 h-1 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600 hover:accent-blue-500"
-                    />
+                    <input type="range" min="0" max={duration || 0} value={currentTime} onChange={handleSeek}
+                        className="flex-1 h-1 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600" />
                     <span className="w-10">{formatTime(duration)}</span>
                 </div>
 
-                {/* Main Controls */}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={togglePlay}
-                            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-white transition-colors"
-                        >
-                            {isPlaying ? <PauseIcon className="w-6 h-6" /> : <PlayIcon className="w-6 h-6" />}
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                        <button onClick={togglePlay} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors">
+                            {isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />}
                         </button>
-
-                        <div className="flex items-center gap-2 group relative">
-                            <button onClick={toggleMute} className="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400">
+                        <div className="flex items-center gap-2 group/vol relative">
+                            <button onClick={toggleMute} className="text-gray-500 hover:text-blue-500 transition-colors">
                                 {isMuted || volume === 0 ? <SpeakerMuteIcon className="w-5 h-5" /> : <SpeakerIcon className="w-5 h-5" />}
                             </button>
-                            <div className="w-0 overflow-hidden group-hover:w-24 transition-all duration-300 ease-in-out">
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="1"
-                                    step="0.01"
-                                    value={isMuted ? 0 : volume}
-                                    onChange={handleVolumeChange}
-                                    className="w-20 h-1 accent-blue-600 cursor-pointer"
-                                />
+                            <div className="w-0 group-hover/vol:w-16 transition-all duration-300 overflow-hidden">
+                                <input type="range" min="0" max="1" step="0.01" value={isMuted ? 0 : volume} onChange={handleVolumeChange} className="w-14 h-1 accent-blue-600" />
                             </div>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={changeSpeed}
-                            className="px-2 py-1 text-xs font-bold text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                        >
-                            {playbackRate}x
-                        </button>
-                    </div>
+                    <button onClick={changeSpeed} className="px-2 py-0.5 text-[10px] font-black text-gray-500 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 transition-colors">
+                        {playbackRate}X
+                    </button>
                 </div>
             </div>
 
-            <audio
-                ref={audioRef}
-                src={src}
-                crossOrigin="anonymous"
-                preload="metadata"
-                className="hidden"
-            />
+            <audio ref={audioRef} src={src} crossOrigin="anonymous" preload="metadata" className="hidden" />
         </div>
     );
 };
 
-const SavedAudioViewer: React.FC<{ content: Content; onRemove: () => void; isAdmin: boolean; onTogglePublish?: (item: Content) => void; lessonId: string }> = ({ content, onRemove, isAdmin, onTogglePublish, lessonId }) => {
-    const [audioError, setAudioError] = useState<string | null>(null);
-    const [audioSrc, setAudioSrc] = useState<string>('');
+const BeautifulAudioCard: React.FC<{ content: Content; index: number; onRemove: () => void; isAdmin: boolean; onTogglePublish?: (item: Content) => void; lessonId: string }> = ({ content, index, onRemove, isAdmin, onTogglePublish, lessonId }) => {
+    const audioSrc = content.file?.url || (content.filePath?.startsWith('http') ? content.filePath : `/api/content/${content._id}/file`) || content.body || '';
 
-    // Enhanced audio source detection
-    const getAudioSrc = () => {
-        if (content.file?.url) return content.file.url;
-        if (content.filePath) {
-            // If it's a full URL, use it
-            if (content.filePath.startsWith('http')) return content.filePath;
-            // Otherwise use the proxy endpoint
-            return `/api/content/${content._id}/file`;
-        }
-        if (content.body && content.body.startsWith('http')) return content.body;
-        return '';
-    };
+    const colorSchemes = [
+        { gradient: 'from-blue-500 to-indigo-600', primary: '#2563EB', accent: '#60A5FA', button: 'bg-blue-600 hover:bg-blue-700' },
+        { gradient: 'from-purple-500 to-fuchsia-600', primary: '#9333EA', accent: '#C084FC', button: 'bg-purple-600 hover:bg-purple-700' },
+        { gradient: 'from-emerald-500 to-teal-600', primary: '#059669', accent: '#34D399', button: 'bg-emerald-600 hover:bg-emerald-700' },
+        { gradient: 'from-orange-500 to-rose-600', primary: '#EA580C', accent: '#FB923C', button: 'bg-orange-600 hover:bg-orange-700' },
+        { gradient: 'from-pink-500 to-rose-600', primary: '#DB2777', accent: '#F472B6', button: 'bg-pink-600 hover:bg-pink-700' },
+        { gradient: 'from-cyan-500 to-blue-600', primary: '#0891B2', accent: '#22D3EE', button: 'bg-cyan-600 hover:bg-cyan-700' },
+    ];
 
-    useEffect(() => {
-        const src = getAudioSrc();
-        setAudioSrc(src);
-    }, [content]);
+    const scheme = colorSchemes[index % colorSchemes.length];
 
-    // Increment view count on mount
     useEffect(() => {
         if (content._id && lessonId) {
-            trackView(lessonId, 'audio', content._id).catch(err => console.error('Error tracking view:', err));
+            trackView(lessonId, 'audio', content._id).catch(() => { });
         }
     }, [content._id, lessonId]);
 
     return (
-        <div className="relative group">
+        <div className="group relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden hover:shadow-2xl transition-all h-full flex flex-col">
             {isAdmin && (
-                <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                <div className="absolute top-3 right-3 z-30 opacity-0 group-hover:opacity-100 transition-all flex gap-2">
                     {onTogglePublish && (
-                        <button
-                            onClick={() => onTogglePublish(content)}
-                            className={`p-2 rounded-full backdrop-blur-sm shadow-sm transition-all ${content.isPublished ? 'bg-white/80 dark:bg-black/80 text-green-600' : 'bg-white/50 dark:bg-black/50 text-gray-500'}`}
-                            title={content.isPublished ? "Published (Click to Unpublish)" : "Draft (Click to Publish)"}
-                        >
+                        <button onClick={() => onTogglePublish(content)} className={`p-2 rounded-xl backdrop-blur-md shadow-md transition-all ${content.isPublished ? 'bg-green-500 text-white' : 'bg-white/90 text-gray-500'}`}>
                             <CheckCircleIcon className="w-4 h-4" />
                         </button>
                     )}
-                    <button onClick={onRemove} className="p-2 rounded-full bg-white/80 dark:bg-black/80 hover:bg-red-500 hover:text-white backdrop-blur-sm shadow-sm transition-all text-gray-600 dark:text-gray-300" title="Remove Audio">
+                    <button onClick={onRemove} className="p-2 rounded-xl bg-white/90 hover:bg-red-500 hover:text-white text-gray-500 shadow-md backdrop-blur-sm transition-all">
                         <TrashIcon className="w-4 h-4" />
                     </button>
                 </div>
             )}
 
-            {audioSrc ? (
-                <CustomAudioPlayer src={audioSrc} title={content.title} id={content._id} />
-            ) : (
-                <div className="p-4 bg-red-50 text-red-500 rounded-lg text-sm">
-                    Audio source not found.
+            <div className="p-4 flex flex-col flex-1">
+                <h3 className="font-bold text-gray-800 dark:text-white mb-4 line-clamp-1 group-hover:text-blue-600 transition-colors" title={content.title}>
+                    {content.title}
+                </h3>
+
+                <div className="mt-auto">
+                    {audioSrc ? (
+                        <CustomAudioPlayer src={audioSrc} title={content.title} id={content._id} colorScheme={scheme} />
+                    ) : (
+                        <div className="p-6 flex flex-col items-center justify-center text-red-500 bg-red-50 dark:bg-red-900/10 rounded-xl border border-dashed border-red-200">
+                            <SpeakerMuteIcon className="w-8 h-8 mb-2" />
+                            <p className="text-xs font-bold">Audio source unavailable</p>
+                        </div>
+                    )}
                 </div>
-            )}
+            </div>
         </div>
     );
 };
 
-const AddAudioForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd: () => void; onCancel: () => void; category?: string; }> = ({ lessonId, existingTitles, onAdd, onCancel, category }) => {
+const UploadForm: React.FC<{ lessonId: string; existingTitles: string[]; onUploadSuccess: () => void; onCancel: () => void; category?: string; }> = ({ lessonId, existingTitles, onUploadSuccess, onCancel, category }) => {
     const [activeTab, setActiveTab] = useState<'upload' | 'link'>('upload');
     const [title, setTitle] = useState('');
     const [folderPath, setFolderPath] = useState('');
-    const [fileName, setFileName] = useState('');
-    const [isSaving, setIsSaving] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [file, setFile] = useState<File | null>(null);
     const [url, setUrl] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
     const { showToast } = useToast();
-    const { addTask } = useBackgroundTask(); // Added
+    const { addTask } = useBackgroundTask();
 
     useEffect(() => {
-        const fetchTitleAndPath = async () => {
+        const fetchDefaults = async () => {
             try {
-                const hierarchy = await api.getHierarchy(lessonId);
-
-                if (hierarchy) {
-                    const { className, subjectName, unitName, subUnitName, lessonName } = hierarchy;
-
-                    const extractNum = (str: string) => {
-                        if (!str) return '0';
-                        const match = str.match(/\d+/);
-                        return match ? match[0] : '0';
-                    };
-
-                    const unitNum = extractNum(unitName);
-                    const subUnitNum = extractNum(subUnitName);
-                    const lessonNum = extractNum(lessonName);
-
-                    const baseTitle = `${unitNum}-${subUnitNum}-${lessonNum} ${lessonName}`;
-                    const extension = '.mp3';
-                    let formattedTitle = `${baseTitle}${extension}`;
-
-                    // Ensure title uniqueness
-                    let counter = 1;
-                    while (existingTitles.some(t => t.toLowerCase() === formattedTitle.toLowerCase())) {
-                        formattedTitle = `${baseTitle} (${counter})${extension}`;
-                        counter++;
-                    }
-
-                    const cleanPart = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '');
-                    const hierarchyParts = [
-                        cleanPart(className),
-                        cleanPart(subjectName),
-                        cleanPart(unitName),
-                        subUnitName ? cleanPart(subUnitName) : '',
-                        cleanPart(lessonName)
-                    ].filter(p => p);
-
-                    const hierarchyPath = hierarchyParts.join('/');
-
-                    setTitle(formattedTitle);
-                    setFileName(formattedTitle);
-                    setFolderPath(`${hierarchyPath}/Audios`);
-                } else {
-                    setTitle('New Audio');
-                    setFolderPath('Default/Audios');
+                const h = await api.getHierarchy(lessonId);
+                if (h) {
+                    const ext = (s: string) => (s.match(/\d+/) || ['0'])[0];
+                    const base = `${ext(h.unitName)}-${ext(h.subUnitName)}-${ext(h.lessonName)} ${h.lessonName}`;
+                    let t = base + '.mp3';
+                    let c = 1;
+                    while (existingTitles.some(et => et.toLowerCase() === t.toLowerCase())) t = `${base} (${c++}).mp3`;
+                    const cl = (s: string) => s.replace(/[^a-zA-Z0-9]/g, '');
+                    const p = [cl(h.className), cl(h.subjectName), cl(h.unitName), h.subUnitName ? cl(h.subUnitName) : '', cl(h.lessonName)].filter(Boolean).join('/');
+                    setTitle(t);
+                    setFolderPath(`${p}/Audios`);
                 }
-            } catch (error) {
-                console.error('Error in fetchTitleAndPath:', error);
-                setTitle('New Audio');
-                setFolderPath('Default/Audios');
-            }
+            } catch (e) { setTitle('New Audio'); setFolderPath('Default/Audios'); }
         };
+        if (lessonId) fetchDefaults();
+    }, [lessonId, existingTitles]);
 
-        if (lessonId) {
-            fetchTitleAndPath();
-        }
-    }, [lessonId]);
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const selectedFile = e.target.files?.[0];
-        if (selectedFile && selectedFile.type.startsWith('audio/')) {
-            setFile(selectedFile);
-            setError(null);
-        } else {
-            showToast('Please select a valid audio file.', 'error');
-            setFile(null);
-        }
-    };
-
-    const handleUploadToCloud = async () => {
+    const handleUpload = () => {
         if (!file || !lessonId) return;
-
-        addTask({
-            type: 'upload',
-            contentType: 'audio',
-            title: title,
-            file: file,
-            lessonId: lessonId,
-            mimeType: file.type,
-            category: category // Pass category
-        });
-
-        showToast('Audio upload started in background', 'info');
-        onAdd();
+        addTask({ type: 'upload', contentType: 'audio', title, file, lessonId, mimeType: file.type, category });
+        showToast('Upload started in background', 'info');
+        onCancel();
     };
 
-    const handleSaveLink = async () => {
+    const handleLinkSave = async () => {
         if (!url || !title) return;
-
         setIsSaving(true);
         try {
-            await api.addContent({
-                title: title.trim(),
-                body: url,
-                lessonId,
-                type: 'audio',
-                category: category || 'standard',
-                metadata: {
-                    category: 'External',
-                    audioUrl: url
-                } as any
-            });
-            showToast('Audio link saved successfully!', 'success');
-            onAdd();
-        } catch (e) {
-            showToast('Failed to save audio link.', 'error');
-        } finally {
-            setIsSaving(false);
-        }
+            await api.addContent({ title: title.trim(), body: url, lessonId, type: 'audio', category: category || 'standard', metadata: { isExternal: true, audioUrl: url } as any });
+            showToast('Link saved successfully', 'success');
+            onUploadSuccess();
+        } catch (e) { showToast('Save failed', 'error'); }
+        setIsSaving(false);
     };
 
     return (
-        <div className="w-full max-w-4xl mx-auto bg-white dark:bg-gray-800/50 p-6 sm:p-8 rounded-lg shadow-md mt-6">
-            <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-semibold text-center text-gray-800 dark:text-white">Add New Audio</h3>
-                <button onClick={onCancel} className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-                    <span className="sr-only">Close</span>
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
-            </div>
-
-            <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6 overflow-x-auto">
-                <button
-                    onClick={() => setActiveTab('upload')}
-                    className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'upload' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                >
-                    Audio Upload
-                </button>
-                <button
-                    onClick={() => setActiveTab('link')}
-                    className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === 'link' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
-                >
-                    Audio Link
-                </button>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-8 items-start">
-                <div className="space-y-6">
+        <div className="w-full max-w-5xl mx-auto bg-white dark:bg-gray-800/80 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden min-h-[500px] flex flex-col md:flex-row animate-scale-in mb-8 relative">
+            <button onClick={onCancel} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 z-10 transition-colors"><XIcon className="w-6 h-6" /></button>
+            <div className="w-full md:w-5/12 p-6 sm:p-8 bg-gray-50/50 dark:bg-gray-900/30 border-r border-gray-100 dark:border-gray-700 flex flex-col">
+                <div className="mb-8">
+                    <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center mb-4"><AudioIcon className="w-6 h-6 text-purple-600 dark:text-purple-400" /></div>
+                    <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Configure Audio</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Set the title and choose your storage strategy.</p>
+                </div>
+                <div className="space-y-6 flex-1">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Audio Title</label>
-                        <input
-                            type="text"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            required
-                            className="mt-1 w-full px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900 dark:text-gray-100"
-                        />
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 font-mono truncate" title={folderPath}>
-                            Path: {folderPath}
-                        </p>
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Track Title</label>
+                        <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none transition-all" />
                     </div>
-
-                    {activeTab === 'upload' && (
-                        <div className="space-y-4">
-                            <>
-                                <div className="mt-1 flex items-center justify-center px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-md hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                                    <div className="space-y-1 text-center">
-                                        <UploadCloudIcon className="mx-auto h-12 w-12 text-gray-400" />
-                                        <div className="flex text-sm text-gray-600 dark:text-gray-400 justify-center">
-                                            <label className="relative cursor-pointer bg-transparent rounded-md font-medium text-blue-600 hover:text-blue-500">
-                                                <span>{file ? 'Change file' : 'Upload a file'}</span>
-                                                <input
-                                                    type="file"
-                                                    className="sr-only"
-                                                    onChange={handleFileChange}
-                                                    accept="audio/*"
-                                                />
-                                            </label>
-                                        </div>
-                                        <p className="text-xs text-gray-500 dark:text-gray-500">
-                                            {file ? file.name : 'MP3, WAV, etc.'}
-                                        </p>
-                                    </div>
-                                </div>
-                                {file && (
-                                    <button
-                                        onClick={handleUploadToCloud}
-                                        className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                                    >
-                                        Upload in Background
-                                    </button>
-                                )}
-                            </>
+                    <div className="space-y-3">
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Source Strategy</label>
+                        <div className="grid grid-cols-2 gap-2 p-1 bg-gray-200/50 dark:bg-gray-700/50 rounded-xl">
+                            <button onClick={() => setActiveTab('upload')} className={`py-2.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'upload' ? 'bg-white dark:bg-gray-600 text-purple-600 dark:text-purple-400 shadow-sm' : 'text-gray-500'}`}>UPLOAD</button>
+                            <button onClick={() => setActiveTab('link')} className={`py-2.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'link' ? 'bg-white dark:bg-gray-600 text-purple-600 dark:text-purple-400 shadow-sm' : 'text-gray-500'}`}>LINK</button>
                         </div>
-                    )}
-
-                    {activeTab === 'link' && (
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Audio URL</label>
-                                <input
-                                    type="url"
-                                    value={url}
-                                    onChange={(e) => setUrl(e.target.value)}
-                                    required
-                                    placeholder="https://example.com/audio.mp3"
-                                    className="mt-1 w-full px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-gray-900 dark:text-gray-100"
-                                />
+                    </div>
+                </div>
+                <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700">
+                    <p className="text-xs text-gray-500 italic">Target: <span className="font-mono text-purple-600 dark:text-purple-400">{folderPath}</span></p>
+                </div>
+            </div>
+            <div className="w-full md:w-7/12 p-6 sm:p-10 flex flex-col justify-center items-center bg-white dark:bg-gray-800 relative">
+                <div className="w-full max-w-sm">
+                    {activeTab === 'upload' ? (
+                        <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                            <div className={`relative group/drop cursor-pointer transition-all duration-300 ${file ? 'bg-purple-50/50 dark:bg-purple-900/20 border-purple-400' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50 border-gray-300'} border-2 border-dashed rounded-3xl p-10 text-center flex flex-col items-center justify-center`}>
+                                <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => { const f = e.target.files?.[0]; if (f?.type.startsWith('audio/')) setFile(f); else showToast('Invalid audio file', 'error'); }} accept="audio/*" />
+                                <div className={`p-5 rounded-2xl mb-4 transition-transform group-hover/drop:scale-110 ${file ? 'bg-purple-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}><UploadCloudIcon className="w-10 h-10" /></div>
+                                {file ? (<><p className="font-bold text-gray-800 dark:text-white truncate max-w-[200px] mb-1">{file.name}</p><p className="text-xs text-purple-500 font-medium">Click to change</p></>) : (<><p className="text-lg font-bold text-gray-700 dark:text-gray-200">Drop Audio here</p><p className="text-sm text-gray-500 dark:text-gray-400 mt-1">or click to browse</p></>)}
                             </div>
-                            <button
-                                onClick={handleSaveLink}
-                                disabled={isSaving}
-                                className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                            >
-                                {isSaving ? 'Saving...' : 'Save Audio Link'}
+                            <button disabled={!file} onClick={handleUpload} className="w-full py-4 px-6 bg-gradient-to-br from-purple-600 to-indigo-700 text-white rounded-2xl font-bold shadow-lg shadow-purple-500/30 hover:shadow-purple-500/50 hover:scale-[1.02] transition-all disabled:opacity-50 flex items-center justify-center gap-3">
+                                <UploadCloudIcon className="w-6 h-6" /><span>START UPLOAD</span>
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Direct Audio Link</label>
+                                <input type="url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://example.com/audio.mp3" className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 outline-none transition-all" />
+                                <p className="text-xs text-gray-500 mt-2">Provide a direct link to an MP3 or WAV file.</p>
+                            </div>
+                            <button disabled={!url || isSaving} onClick={handleLinkSave} className="w-full py-4 px-6 bg-gray-900 dark:bg-gray-700 text-white rounded-2xl font-bold shadow-xl hover:shadow-2xl hover:bg-black dark:hover:bg-gray-600 transition-all disabled:opacity-50 flex items-center justify-center gap-3">
+                                {isSaving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <LinkIcon className="w-6 h-6" />}
+                                <span>{isSaving ? 'SAVING...' : 'SAVE DIRECT LINK'}</span>
                             </button>
                         </div>
                     )}
-
-                    {error && <p className="text-sm text-red-500 dark:text-red-400">{error}</p>}
-                </div>
-
-                <div className="h-full flex flex-col">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Preview & Info</label>
-                    <div className="flex-1 bg-gray-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6 flex flex-col items-center justify-center text-center">
-                        <AudioIcon className="w-16 h-16 text-blue-500 mb-4" />
-                        <h4 className="text-lg font-medium text-gray-800 dark:text-white mb-2">Audio Enhancement</h4>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xs">
-                            Uploaded audio will feature an interactive visualizer, speed controls, and a modern playback interface.
-                        </p>
-                        {file && (
-                            <div className="mt-6 w-full">
-                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Selected File</p>
-                                <div className="bg-white dark:bg-gray-700 p-3 rounded border dark:border-gray-600 text-sm truncate">
-                                    {file.name}
-                                </div>
-                            </div>
-                        )}
-                    </div>
                 </div>
             </div>
         </div>
@@ -613,163 +420,82 @@ const AddAudioForm: React.FC<{ lessonId: string; existingTitles: string[]; onAdd
 export const AudioView: React.FC<AudioViewProps> = ({ lessonId, user, category }) => {
     const [version, setVersion] = useState(0);
     const { triggerContentUpdate, updateVersion } = useContentUpdate();
-    const { data: groupedContent, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['audio'], (user.role !== 'admin' && !user.canEdit), category), [lessonId, version, user, updateVersion, category]);
+    const { data: grouped, isLoading } = useApi(() => api.getContentsByLessonId(lessonId, ['audio'], (user.role !== 'admin' && !user.canEdit), category), [lessonId, version, user, updateVersion, category]);
     const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; onConfirm: (() => void) | null }>({ isOpen: false, onConfirm: null });
     const [showAddForm, setShowAddForm] = useState(false);
     const [pickerOpen, setPickerOpen] = useState(false);
-    const [stats, setStats] = useState<{ count: number } | null>(null);
     const { showToast } = useToast();
 
-    useEffect(() => {
-        const updateStats = async () => {
-            try {
-                const h = await api.getHierarchy(lessonId);
-                setStats({ count: 0 });
-            } catch (e) {
-                console.error('Failed to fetch stats', e);
-            }
-        };
-        updateStats();
-    }, [lessonId]);
+    const audios = grouped?.[0]?.docs || [];
+    const isAdmin = user.role === 'admin' || !!user.canEdit;
 
-    const audioContents = groupedContent?.[0]?.docs || [];
-    const canEdit = user.role === 'admin' || !!user.canEdit;
-
-    const handleDelete = (contentId: string) => {
-        const action = async () => {
-            try {
-                await api.deleteContent(contentId);
-                setVersion(v => v + 1);
-                triggerContentUpdate(); // Update sidebar counts
-                showToast('Audio deleted successfully', 'success');
-            } catch (e) {
-                showToast('Failed to delete audio', 'error');
+    const handleDelete = (id: string) => {
+        setConfirmModal({
+            isOpen: true, onConfirm: async () => {
+                try { await api.deleteContent(id); setVersion(v => v + 1); triggerContentUpdate(); showToast('Audio deleted', 'success'); } catch (e) { showToast('Delete failed', 'error'); }
+                setConfirmModal({ isOpen: false, onConfirm: null });
             }
-            setConfirmModal({ isOpen: false, onConfirm: null });
-        };
-        setConfirmModal({ isOpen: true, onConfirm: action });
+        });
     };
 
     const handleTogglePublish = async (item: Content) => {
         try {
             const newStatus = !item.isPublished;
             await api.updateContent(item._id, { isPublished: newStatus });
-            setVersion(v => v + 1);
-            triggerContentUpdate(); // Update sidebar counts
-            showToast(`Audio ${newStatus ? 'published' : 'unpublished'} successfully`, 'success');
-        } catch (error) {
-            console.error('Failed to toggle publish status:', error);
-            showToast('Failed to update publish status', 'error');
-        }
+            setVersion(v => v + 1); triggerContentUpdate();
+            showToast(`Audio ${newStatus ? 'published' : 'unpublished'}`, 'success');
+        } catch (e) { showToast('Failed to update status', 'error'); }
     };
 
-    const handleAddSuccess = () => {
-        setVersion(v => v + 1);
-        triggerContentUpdate(); // Update sidebar counts
-        setShowAddForm(false);
-    };
-
-    const handleLinkContent = async (selectedItems: Content[]) => {
+    const handleLinkContent = async (items: Content[]) => {
         try {
-            await Promise.all(selectedItems.map(item => {
-                const title = item.title;
-                const metadata = item.metadata || {};
-
-                return api.addContent({
-                    lessonId,
-                    type: 'audio',
-                    title: title,
-                    body: item.body, // Contains URL for external links
-                    isPublished: false,
-                    category: category,
-                    filePath: item.filePath,
-                    file: item.file,
-                    metadata: metadata
-                });
-            }));
-            setVersion(v => v + 1);
-            triggerContentUpdate();
-            showToast(`Successfully linked ${selectedItems.length} audio files`, 'success');
-        } catch (e) {
-            console.error(e);
-            showToast('Failed to link content', 'error');
-        }
+            await Promise.all(items.map(i => api.addContent({ lessonId, type: 'audio', title: i.title, body: i.body, isPublished: false, category, filePath: i.filePath, file: i.file, metadata: i.metadata || {} })));
+            setVersion(v => v + 1); triggerContentUpdate();
+            showToast(`Linked ${items.length} files`, 'success');
+        } catch (e) { showToast('Link failed', 'error'); }
     };
 
     return (
-        <div className="h-full flex flex-col overflow-hidden">
-            {canEdit && audioContents.length > 0 && (
-                <ContentStatusBanner
-                    publishedCount={audioContents.filter(a => a.isPublished).length}
-                    unpublishedCount={audioContents.filter(a => !a.isPublished).length}
-                />
-            )}
-
+        <div className="h-full flex flex-col overflow-hidden bg-gray-50/30 dark:bg-gray-900/30">
+            {isAdmin && audios.length > 0 && <ContentStatusBanner publishedCount={audios.filter(a => a.isPublished).length} unpublishedCount={audios.filter(a => !a.isPublished).length} />}
             <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-hidden flex flex-col">
                 <div className="flex justify-between items-center mb-6 shrink-0">
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-3">
-                            <AudioIcon className="w-8 h-8 text-purple-600" />
-                            <h1 className="text-lg sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-purple-600 dark:from-white dark:to-purple-400">Audio</h1>
-                        </div>
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg"><AudioIcon className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600 dark:text-purple-400" /></div>
+                        <h1 className="text-xl sm:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-purple-600 dark:from-white dark:to-purple-400">Audio Tracks</h1>
                     </div>
-
-                    {canEdit && !showAddForm && (
+                    {isAdmin && (
                         <div className="flex items-center gap-2">
-                            {category === 'below_average_d_plus' && (
-                                <button
-                                    onClick={() => setPickerOpen(true)}
-                                    className="flex items-center justify-center p-2.5 w-10 h-10 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors sm:px-4 sm:w-auto sm:h-auto"
-                                    title="Link Existing Standard Content"
-                                >
-                                    <LinkIcon className="w-5 h-5" />
-                                    <span className="hidden sm:inline sm:ml-2">Link Existing</span>
-                                </button>
-                            )}
-                            <button onClick={() => setShowAddForm(true)} className="flex items-center justify-center p-2.5 w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors sm:px-4 sm:w-auto sm:h-auto" title="Add New Audio">
-                                <PlusIcon className="w-5 h-5" />
-                                <span className="hidden sm:inline sm:ml-2">Add New</span>
+                            {category === 'below_average_d_plus' && <button onClick={() => setPickerOpen(true)} className="flex items-center gap-2 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl transition-all shadow-md"><LinkIcon className="w-5 h-5" /><span className="hidden sm:inline">Link</span></button>}
+                            <button onClick={() => setShowAddForm(!showAddForm)} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all shadow-md ${showAddForm ? 'bg-gray-100' : 'bg-blue-600 border-none text-white'}`}>
+                                <PlusIcon className={`w-5 h-5 transition-transform ${showAddForm ? 'rotate-45' : ''}`} />
+                                <span className="hidden sm:inline">{showAddForm ? 'Cancel' : 'Add New'}</span>
                             </button>
                         </div>
                     )}
                 </div>
-
-                <div className="flex-1 overflow-y-auto min-h-0">
-                    {isLoading && <div className="text-center py-10">Loading audio...</div>}
-
-                    {!isLoading && showAddForm && (
-                        <AddAudioForm lessonId={lessonId} existingTitles={audioContents.map(a => a.title)} onAdd={handleAddSuccess} onCancel={() => setShowAddForm(false)} category={category} />
-                    )}
-
-                    {!isLoading && !showAddForm && audioContents.length > 0 && (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
-                            {audioContents.map(audio => (
-                                <SavedAudioViewer key={audio._id} content={audio} onRemove={() => handleDelete(audio._id)} isAdmin={canEdit} onTogglePublish={handleTogglePublish} lessonId={lessonId} />
-                            ))}
-                        </div>
-                    )}
-
-                    {!isLoading && !showAddForm && audioContents.length === 0 && (
-                        <div className="text-center py-20 bg-white dark:bg-gray-800/50 rounded-lg">
-                            <AudioIcon className="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600" />
-                            <p className="mt-4 text-gray-500">
-                                No audio available for this chapter.
-                                {canEdit && " Click 'Add New Audio' to get started."}
-                            </p>
-                        </div>
+                <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar pr-2">
+                    {isLoading ? <div className="flex flex-col items-center justify-center py-20"><div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mb-4"></div><p className="text-gray-500">Loading audio...</p></div> : (
+                        <>
+                            {showAddForm && <UploadForm lessonId={lessonId} existingTitles={audios.map(a => a.title)} onUploadSuccess={() => { setVersion(v => v + 1); setShowAddForm(false); triggerContentUpdate(); }} onCancel={() => setShowAddForm(false)} category={category} />}
+                            {audios.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-10">
+                                    {audios.map((a, i) => <BeautifulAudioCard key={a._id} content={a} index={i} onRemove={() => handleDelete(a._id)} isAdmin={isAdmin} onTogglePublish={handleTogglePublish} lessonId={lessonId} />)}
+                                </div>
+                            ) : !showAddForm && (
+                                <div className="flex flex-col items-center justify-center py-32 bg-white dark:bg-gray-800/30 rounded-3xl border-2 border-dashed border-gray-200">
+                                    <AudioIcon className="w-16 h-16 text-gray-300 mb-6" />
+                                    <h3 className="text-xl font-bold text-gray-700 mb-2">No audio tracks</h3>
+                                    <p className="text-gray-500 text-center max-w-xs">{isAdmin ? "Ready to add sound? Click 'Add New' to start." : "Check back later for audio."}</p>
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
-
-                <ConfirmModal isOpen={confirmModal.isOpen} onClose={() => setConfirmModal({ isOpen: false, onConfirm: null })} onConfirm={confirmModal.onConfirm} title="Remove Audio" message="Are you sure you want to remove this audio file?" />
-
-                <StandardContentPicker
-                    isOpen={pickerOpen}
-                    onClose={() => setPickerOpen(false)}
-                    onImport={handleLinkContent}
-                    lessonId={lessonId}
-                    resourceType="audio"
-                />
             </div>
+            <ConfirmModal isOpen={confirmModal.isOpen} onClose={() => setConfirmModal({ isOpen: false, onConfirm: null })} onConfirm={confirmModal.onConfirm} title="Remove Audio" message="Are you sure?" />
+            <StandardContentPicker isOpen={pickerOpen} onClose={() => setPickerOpen(false)} onImport={handleLinkContent} lessonId={lessonId} resourceType="audio" />
+            <style>{`.custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; } .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; }`}</style>
         </div>
     );
 };

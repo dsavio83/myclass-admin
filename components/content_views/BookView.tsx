@@ -256,95 +256,135 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
     };
 
     return (
-        <div className="w-full max-w-4xl mx-auto bg-white dark:bg-gray-800/50 p-6 sm:p-8 rounded-lg shadow-md h-full flex flex-col overflow-hidden">
-            <h3 className="text-lg font-bold text-center mb-6 text-gray-800 dark:text-white shrink-0">Add New Book</h3>
+        <div className="w-full max-w-5xl mx-auto bg-white dark:bg-gray-800/80 backdrop-blur-md rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden min-h-[500px] flex flex-col md:flex-row animate-scale-in">
+            {/* Left Panel: Settings & Info */}
+            <div className="w-full md:w-5/12 p-6 sm:p-8 bg-gray-50/50 dark:bg-gray-900/30 border-r border-gray-100 dark:border-gray-700 flex flex-col">
+                <div className="mb-8">
+                    <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Configure Content</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Set the title and choose your upload method for the new book.</p>
+                </div>
 
-            {/* Tabs */}
-            <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6 shrink-0">
-                <button
-                    onClick={() => setActiveTab('upload')}
-                    className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'upload'
-                        ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                        }`}
-                >
-                    PDF Upload
-                </button>
-                <button
-                    onClick={() => setActiveTab('link')}
-                    className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'link'
-                        ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                        }`}
-                >
-                    Direct Link
-                </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto pr-2">
-                <div className="space-y-6">
-                    {/* Common Title Input */}
+                <div className="space-y-6 flex-1">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Book Title</label>
-                        <input
-                            type="text"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                        />
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Book Title</label>
+                        <div className="relative group">
+                            <input
+                                type="text"
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                className="w-full pl-4 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none"
+                                placeholder="Enter book title..."
+                            />
+                        </div>
                     </div>
 
+                    <div className="space-y-3">
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Upload Strategy</label>
+                        <div className="grid grid-cols-2 gap-2 p-1 bg-gray-200/50 dark:bg-gray-700/50 rounded-xl">
+                            <button
+                                onClick={() => setActiveTab('upload')}
+                                className={`py-2.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'upload'
+                                        ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                                    }`}
+                            >
+                                <div className="flex items-center justify-center gap-2">
+                                    <UploadCloudIcon className="w-4 h-4" />
+                                    PDF UPLOAD
+                                </div>
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('link')}
+                                className={`py-2.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'link'
+                                        ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-400 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                                    }`}
+                            >
+                                <div className="flex items-center justify-center gap-2">
+                                    <LinkIcon className="w-4 h-4" />
+                                    DIRECT LINK
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700 group">
+                    <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400 italic">
+                        <p>Target Folder: <span className="font-mono text-xs font-semibold text-blue-600 dark:text-blue-400">{folderPath}</span></p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Right Panel: Actions */}
+            <div className="w-full md:w-7/12 p-6 sm:p-10 flex flex-col justify-center items-center bg-white dark:bg-gray-800 relative group">
+                <div className="w-full max-w-sm">
                     {activeTab === 'upload' && (
-                        <div className="space-y-6 animate-fade-in">
-                            <>
-                                {/* File Input */}
-                                <div className="mt-1 flex items-center justify-center px-6 pt-10 pb-10 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                                    <div className="space-y-2 text-center">
-                                        <UploadCloudIcon className="mx-auto h-12 w-12 text-gray-400" />
-                                        <div className="flex text-sm text-gray-600 dark:text-gray-400 justify-center">
-                                            <label htmlFor="pdfFile" className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
-                                                <span>Select PDF File</span>
-                                                <input id="pdfFile" name="pdfFile" type="file" className="sr-only" onChange={handleFileChange} accept=".pdf" />
-                                            </label>
-                                        </div>
-                                        <p className="text-xs text-gray-500 dark:text-gray-500">{file ? file.name : 'PDF up to 10MB'}</p>
-                                    </div>
+                        <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                            <div
+                                className={`relative group/drop cursor-pointer transition-all duration-300 ${file ? 'bg-blue-50/50 dark:bg-blue-900/20 border-blue-400' : 'hover:bg-gray-50 dark:hover:bg-gray-700/50 border-gray-300'
+                                    } border-2 border-dashed rounded-3xl p-10 text-center flex flex-col items-center justify-center`}
+                            >
+                                <input id="pdfFile" name="pdfFile" type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileChange} accept=".pdf" />
+
+                                <div className={`p-5 rounded-2xl mb-4 transition-transform group-hover/drop:scale-110 ${file ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}>
+                                    <UploadCloudIcon className="w-10 h-10" />
                                 </div>
 
-                                {/* Upload Button */}
-                                {file && (
-                                    <div className="space-y-4">
-                                        <button
-                                            onClick={handleUploadToCloud}
-                                            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all"
-                                        >
-                                            Upload in Background
-                                        </button>
+                                {file ? (
+                                    <div className="animate-in fade-in zoom-in duration-300">
+                                        <p className="font-bold text-gray-800 dark:text-white truncate max-w-[200px] mb-1">{file.name}</p>
+                                        <p className="text-xs text-blue-500 font-medium">Click to change file</p>
                                     </div>
+                                ) : (
+                                    <>
+                                        <p className="text-lg font-bold text-gray-700 dark:text-gray-200">Drop PDF here</p>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">or click to browse</p>
+                                    </>
                                 )}
-                            </>
+                            </div>
+
+                            <button
+                                disabled={!file}
+                                onClick={handleUploadToCloud}
+                                className="w-full py-4 px-6 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl font-bold shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100 flex items-center justify-center gap-3"
+                            >
+                                <SaveIcon className="w-6 h-6" />
+                                <span>START UPLOAD</span>
+                            </button>
                         </div>
                     )}
 
                     {activeTab === 'link' && (
-                        <div className="space-y-6 animate-fade-in">
+                        <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">PDF URL</label>
+                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Resource Link</label>
                                 <input
                                     type="url"
                                     value={linkUrl}
                                     onChange={(e) => setLinkUrl(e.target.value)}
                                     placeholder="https://example.com/file.pdf"
-                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                 />
-                                <p className="mt-1 text-xs text-gray-500">Paste a direct link to a PDF file.</p>
+                                <p className="text-xs text-gray-500 mt-2">Provide a direct link to a hosted PDF file.</p>
                             </div>
+
                             <button
+                                disabled={!linkUrl || isSaving}
                                 onClick={handleSaveLink}
-                                disabled={isSaving || !linkUrl}
-                                className="w-full py-3 px-4 bg-gray-800 dark:bg-gray-700 text-white rounded-lg font-semibold shadow hover:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                className="w-full py-4 px-6 bg-gray-900 dark:bg-gray-700 text-white rounded-2xl font-bold shadow-xl hover:shadow-2xl hover:bg-black dark:hover:bg-gray-600 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
                             >
-                                {isSaving ? 'Saving...' : 'Save Link'}
+                                {isSaving ? (
+                                    <>
+                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                        <span>SAVING...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <LinkIcon className="w-6 h-6" />
+                                        <span>SAVE DIRECT LINK</span>
+                                    </>
+                                )}
                             </button>
                         </div>
                     )}

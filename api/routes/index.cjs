@@ -3455,6 +3455,78 @@ router.post('/content/get-signed-url', (req, res) => {
     }
 });
 
+// --- Quick CSV Import from Local Path ---
+router.post('/import-flashcards-local', async (req, res) => {
+    try {
+        const { filePath } = req.body;
+
+        if (!filePath) {
+            return res.status(400).json({ message: 'filePath is required' });
+        }
+
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ message: `File not found at: ${filePath}` });
+        }
+
+        const csvContent = fs.readFileSync(filePath, 'utf8');
+        const lines = csvContent.split(/\r?\n/).filter(line => line.trim());
+
+        const flashcards = [];
+
+        // Helper function to parse CSV line with proper quote handling
+        const parseCSVLine = (line) => {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                const nextChar = line[i + 1];
+
+                if (char === '"' && nextChar === '"') {
+                    current += '"';
+                    i++; // Skip next quote
+                } else if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current);
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current);
+            return result;
+        };
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+
+            const parts = parseCSVLine(line);
+            if (parts.length >= 2) {
+                flashcards.push({
+                    title: parts[0].trim(),
+                    body: parts[1].trim()
+                });
+            }
+        }
+
+        if (flashcards.length === 0) {
+            return res.status(400).json({ message: 'No valid flashcards found in CSV' });
+        }
+
+        res.json({
+            success: true,
+            flashcards: flashcards,
+            count: flashcards.length
+        });
+    } catch (error) {
+        console.error('Local CSV Import error:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
 module.exports = router;
 
 

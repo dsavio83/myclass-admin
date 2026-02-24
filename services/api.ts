@@ -248,6 +248,9 @@ export const deleteContent = (id: string): Promise<{ success: boolean }> =>
 export const deleteMultipleContent = (ids: string[]): Promise<{ success: boolean; message: string; deletedCount: number }> =>
     apiRequest('/content/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) });
 
+export const importFlashcardsFromLocalPath = (filePath: string): Promise<{ success: boolean; flashcards: { title: string; body: string }[]; count: number }> =>
+    apiRequest('/import-flashcards-local', { method: 'POST', body: JSON.stringify({ filePath }) });
+
 
 
 // --- Breadcrumbs ---

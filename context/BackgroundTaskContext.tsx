@@ -79,10 +79,12 @@ export const BackgroundTaskProvider: React.FC<{ children: ReactNode }> = ({ chil
             updateTask(nextTask.id, { status: 'uploading', progress: 0 });
 
             try {
-                if (['worksheet', 'book', 'slide', 'questionPaper'].includes(nextTask.contentType)) {
-                    await processLocalUpload(nextTask);
-                } else if (['video', 'audio'].includes(nextTask.contentType)) {
+                // Split strategy: Use direct Cloudinary for larger media (Video/Audio) to get real-time progress.
+                // For document types (Books, Worksheets, etc.), use local /api/upload which handles hierarchy logic on the server.
+                if (nextTask.contentType === 'video' || nextTask.contentType === 'audio') {
                     await processCloudinaryUpload(nextTask);
+                } else {
+                    await processLocalUpload(nextTask);
                 }
 
                 updateTask(nextTask.id, { status: 'completed', progress: 100 });
@@ -128,8 +130,8 @@ export const BackgroundTaskProvider: React.FC<{ children: ReactNode }> = ({ chil
 
             xhr.upload.addEventListener('progress', e => {
                 if (e.lengthComputable) {
-                    // Normalize Local upload to 0-95%, save step happens after
-                    const percent = Math.round(((e.loaded / e.total) * 100) * 0.95);
+                    // Normalize Local upload to 0-90%, save step happens after
+                    const percent = Math.round(((e.loaded / e.total) * 100) * 0.9);
                     updateTask(task.id, { progress: percent });
                 }
             });
@@ -181,7 +183,7 @@ export const BackgroundTaskProvider: React.FC<{ children: ReactNode }> = ({ chil
             const xhr = new XMLHttpRequest();
             xhr.upload.addEventListener('progress', (e) => {
                 if (e.lengthComputable) {
-                    // Normalize Cloudinary upload to 0-90%, save step is 90-100%
+                    // Normalize Cloudinary upload to 0-90%
                     const percent = Math.round(((e.loaded / e.total) * 100) * 0.9);
                     updateTask(task.id, { progress: percent });
                 }
@@ -196,7 +198,10 @@ export const BackgroundTaskProvider: React.FC<{ children: ReactNode }> = ({ chil
             };
             xhr.onerror = () => reject(new Error('Network error during cloud upload'));
 
-            const cloudUrl = `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`;
+            // Determine resource type for URL (video and audio must go to /video/upload)
+            const resourceType = (task.contentType === 'video' || task.contentType === 'audio') ? 'video' : 'auto';
+            const cloudUrl = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`;
+
             xhr.open('POST', cloudUrl);
             xhr.send(formData);
         }).then(async (result) => {
@@ -214,7 +219,7 @@ export const BackgroundTaskProvider: React.FC<{ children: ReactNode }> = ({ chil
                     publicId: result.public_id,
                     size: result.bytes,
                     mimeType: task.file.type,
-                    resourceType: 'video', // Cloudinary usually treats audio as video
+                    resourceType: result.resource_type || (task.contentType === 'video' || task.contentType === 'audio' ? 'video' : 'raw'),
                     category: task.category
                 })
             });

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { importFlashcardsFromLocalPath } from '../../services/api';
 
 interface ImportFlashcardsModalProps {
     isOpen: boolean;
@@ -10,7 +11,8 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
     const [text, setText] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [importMode, setImportMode] = useState<'json' | 'csv'>('json');
+    const [importMode, setImportMode] = useState<'json' | 'csv' | 'path'>('json');
+    const [localPath, setLocalPath] = useState('C:\\Users\\Dominic\\Downloads\\flashcards.csv');
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -113,18 +115,6 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
     const fixUnescapedQuotes = (jsonStr: string): string => {
         const lines = jsonStr.split('\n');
         const fixedLines = lines.map(line => {
-            // Match lines like: "f": "Start content... end content",
-            // We capture everything between the first "f": " and the last " (before optional comma)
-
-            // Regex explanation:
-            // ^(\s*)          -> indent
-            // "([fb])"        -> key "f" or "b"
-            // \s*:\s*         -> separator
-            // "               -> opening quote of value
-            // (.*)            -> content (greedy, captures until last possible quote)
-            // "               -> closing quote of value
-            // (\s*,?)         -> optional comma and trailing space
-            // \s*$            -> end of line
             const match = line.match(/^(\s*)"([fb])"\s*:\s*"(.*)"(\s*,?)\s*$/);
 
             if (match) {
@@ -192,21 +182,13 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
 
         try {
             // 4. Handle "Unexpected non-whitespace character" / Multiple Root Objects
-            // This happens if user pastes: {...} {...} or {...}\n{...}
             try {
-                // If it starts with { and ends with }, and has multiple objects
-                // Try to split objects and wrap in array
-                // A simple heuristic: replace "}{" with "},{"
-                // taking into account whitespace
                 const fixed = `[${cleaned.replace(/}\s*\{/g, '},{')}]`;
                 const parsed = JSON.parse(fixed);
                 if (Array.isArray(parsed)) return parsed;
-            } catch (e2) {
-                // Ignore
-            }
+            } catch (e2) { }
 
             // 5. Fallback: Try extracting all JSON objects using regex
-            // This is useful if there is weird garbage text around valid JSON objects
             try {
                 const matches = cleaned.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
                 if (matches && matches.length > 0) {
@@ -214,12 +196,8 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
                     const parsed = JSON.parse(combined);
                     if (Array.isArray(parsed)) return parsed;
                 }
-            } catch (e3) {
-                // Ignore
-            }
+            } catch (e3) { }
 
-            // If we are here, everything failed.
-            // Throw the original error from the first parse attempt or a generic one
             JSON.parse(cleaned); // rebuild error
         } catch (e) {
             throw e;
@@ -228,25 +206,45 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
 
     const handleFormat = () => {
         setError(null);
-        console.log('[Format] Original text length:', text.length);
-
         try {
             const parsed = robustParse(text);
             if (parsed) {
                 const formattedText = JSON.stringify(parsed, null, 2);
-                console.log('[Format] Successfully formatted JSON');
                 setText(formattedText);
                 return;
             } else {
                 setError("JSON must be an array of objects.");
             }
         } catch (e) {
-            console.log('[Format] Parse error:', e.message);
             setError(`Invalid JSON syntax: ${e.message}`);
         }
     };
 
+    const handleQuickImport = async () => {
+        if (isSaving || !localPath.trim()) return;
+        setIsSaving(true);
+        setError(null);
+        try {
+            const response = await importFlashcardsFromLocalPath(localPath);
+            if (response.success && response.flashcards.length > 0) {
+                await onImport(response.flashcards);
+                onClose();
+            } else {
+                setError("No flashcards found in the specified file.");
+            }
+        } catch (e) {
+            setError(`Failed to import from path: ${e.message}`);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     const handleImport = async () => {
+        if (importMode === 'path') {
+            await handleQuickImport();
+            return;
+        }
+
         if (isSaving || !text.trim()) return;
 
         setIsSaving(true);
@@ -257,11 +255,9 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
             cards = parseCSV(text);
         } else {
             try {
-                // Use the same robust parser
                 let parsedJson = robustParse(text);
 
                 if (parsedJson) {
-                    // Check for nested arrays (e.g. if robustParse wrapped an existing array)
                     if (parsedJson.length > 0 && Array.isArray(parsedJson[0])) {
                         parsedJson = parsedJson.flat();
                     }
@@ -269,22 +265,16 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
                     cards = parsedJson
                         .filter(item => {
                             if (!item) return false;
-                            // Relaxed check: Accept if we can find ANY property that looks like a Question/Answer
-                            // Or if distinct 'f'/'b' keys exist.
                             const keys = Object.keys(item).map(k => k.toLowerCase());
                             const hasFront = item.f || item.front || item.title || item.question || item.q || keys.some(k => k.includes('question') || k === 'f' || k === 'q');
                             const hasBack = item.b || item.back || item.body || item.answer || item.a || keys.some(k => k.includes('answer') || k === 'b' || k === 'a');
-
-                            const valid = hasFront && hasBack;
-                            return valid;
+                            return hasFront && hasBack;
                         })
                         .map(item => {
-                            // Helper to find value case-insensitively
                             const getValue = (keys: string[]) => {
                                 for (const key of keys) {
                                     if (item[key]) return item[key];
                                 }
-                                // Search by partial key match
                                 for (const key of Object.keys(item)) {
                                     const lower = key.toLowerCase();
                                     if (keys.some(k => lower.includes(k) || lower === k)) return item[key];
@@ -299,10 +289,7 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
                         });
                 }
             } catch (e) {
-                console.error(e);
-                // Final fallback: semicolon separated values
-                // Only try this if robust parsing completely failed
-                const lines = text.trim().replace(/`/g, "").split('\n'); // Clean backticks here too
+                const lines = text.trim().replace(/`/g, "").split('\n');
                 const fallbackCards = lines
                     .map(line => line.split(';'))
                     .filter(parts => parts.length >= 2 && parts[0].trim() && parts[1].trim())
@@ -314,7 +301,6 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
                 if (fallbackCards.length > 0) {
                     cards = fallbackCards;
                 } else {
-                    // Re-throw original error to show user if fallback also failed
                     setError(`Could not parse JSON: ${e.message}. For text mode, use "Question;Answer" per line.`);
                     setIsSaving(false);
                     return;
@@ -340,7 +326,6 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-3xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
                 <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-white">Import Flashcards</h2>
 
-                {/* Import Mode Selection */}
                 <div className="mb-4 flex gap-2">
                     <button
                         onClick={() => setImportMode('json')}
@@ -354,66 +339,82 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
                     >
                         CSV File
                     </button>
+                    <button
+                        onClick={() => setImportMode('path')}
+                        className={`px-3 py-1 text-sm rounded-md ${importMode === 'path' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}`}
+                    >
+                        Quick Import (Path)
+                    </button>
                 </div>
 
                 <div className="text-sm text-gray-500 dark:text-gray-400 mb-4 space-y-2">
-                    {importMode === 'json' ? (
-                        <>
-                            {/* <p>Paste your JSON content below. Supported formats:</p> */}
-                            <ul className="list-disc list-inside text-xs space-y-1">
-                                <li><b>JSON Array:</b> <code className="bg-gray-100 dark:bg-gray-700 p-1 rounded-sm select-all">{`[{"f":"Question HTML","b":"Answer HTML"}]`}</code> (Use 'Format' button to clean quotes).</li>
-                                {/* <li><b>Plain Text:</b> Each line: <code className="bg-gray-100 dark:bg-gray-700 p-1 rounded-sm select-all">{`Question;Answer`}</code></li> */}
-                            </ul>
-                        </>
+                    {importMode === 'path' ? (
+                        <p>Import directly from a local CSV file on the server machine.</p>
+                    ) : importMode === 'json' ? (
+                        <ul className="list-disc list-inside text-xs space-y-1">
+                            <li><b>JSON Array:</b> <code className="bg-gray-100 dark:bg-gray-700 p-1 rounded-sm select-all">{`[{"f":"Question HTML","b":"Answer HTML"}]`}</code></li>
+                        </ul>
                     ) : (
-                        <>
-                            {/* <p>Upload a CSV file or paste CSV content. Format:</p> */}
-                            <ul className="list-disc list-inside text-xs space-y-1">
-                                {/* <li><b>CSV Format:</b> <code className="bg-gray-100 dark:bg-gray-700 p-1 rounded-sm select-all">{`Question,Answer`}</code></li> */}
-                                <li><b>First column:</b> Front - <b>Second column:</b> Back</li>
-                            </ul>
-                        </>
+                        <ul className="list-disc list-inside text-xs space-y-1">
+                            <li><b>First column:</b> Front - <b>Second column:</b> Back</li>
+                        </ul>
                     )}
                 </div>
 
-                {/* File Upload for CSV */}
-                {importMode === 'csv' && (
-                    <div className="mb-4">
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".csv"
-                            onChange={handleFileUpload}
-                            className="hidden"
+                {importMode === 'path' ? (
+                    <div className="space-y-4 flex-1">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Local File Path (CSV)</label>
+                            <input
+                                type="text"
+                                value={localPath}
+                                onChange={e => setLocalPath(e.target.value)}
+                                className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-mono text-sm"
+                                placeholder="e.g. C:\Downloads\flashcards.csv"
+                            />
+                        </div>
+                        <div className="p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-md">
+                            <p className="text-xs text-purple-800 dark:text-purple-200">
+                                This will read the file directly from the specified path on the computer running the admin panel.
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <>
+                        {importMode === 'csv' && (
+                            <div className="mb-4">
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept=".csv"
+                                    onChange={handleFileUpload}
+                                    className="hidden"
+                                />
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="px-4 py-2 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-md hover:bg-green-200 dark:hover:bg-green-800 text-sm font-medium"
+                                >
+                                    Choose CSV File
+                                </button>
+                            </div>
+                        )}
+                        <textarea
+                            value={text}
+                            rows={15}
+                            onChange={e => { setText(e.target.value); setError(null); }}
+                            placeholder={importMode === 'json'
+                                ? `[\n  {\n    "f": "What is <b>HTML</b>?",\n    "b": "HyperText Markup Language"\n  }\n]`
+                                : `Question 1,Answer 1\nQuestion 2,Answer 2`
+                            }
+                            className="flex-1 w-full p-3 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-mono text-xs resize-none"
+                            autoFocus
                         />
-                        <button
-                            onClick={() => fileInputRef.current?.click()}
-                            className="px-4 py-2 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-md hover:bg-green-200 dark:hover:bg-green-800 text-sm font-medium"
-                        >
-                            Choose CSV File
-                        </button>
-                    </div>
+                    </>
                 )}
-                <textarea
-                    value={text}
-                    rows={15}
-                    onChange={e => { setText(e.target.value); setError(null); }}
-                    placeholder={importMode === 'json'
-                        ? `[\n  {\n    "f": "What is <b>HTML</b>?",\n    "b": "HyperText Markup Language"\n  }\n]`
-                        : `Question 1,Answer 1\nQuestion 2,Answer 2\nQuestion 3,Answer 3`
-                    }
-                    className="flex-1 w-full p-3 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-mono text-xs resize-none"
-                    autoFocus
-                />
+
                 {error && <p className="text-sm text-red-500 dark:text-red-400 mt-2">{error}</p>}
-                {hasUnformattedQuotes() && (
-                    <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
-                        {/* <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                            ⚠️ JSON contains HTML entities (&amp;quot;, &amp;#39;, etc.) that need to be fixed. Click "Fix HTML Entities" to format.
-                        </p> */}
-                    </div>
-                )}
-                <div className="mt-4 flex justify-end gap-3">
+
+                <div className="mt-6 flex justify-end gap-3">
                     {importMode === 'json' && (
                         <button onClick={handleFormat} className="px-4 py-2 bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 rounded-md hover:bg-yellow-200 dark:hover:bg-yellow-800 font-medium text-sm">
                             {hasUnformattedQuotes() ? 'Fix HTML Entities' : 'Format & Preview'}
@@ -422,8 +423,12 @@ export const ImportFlashcardsModal: React.FC<ImportFlashcardsModalProps> = ({ is
                     <button type="button" onClick={onClose} className="px-4 py-2 rounded-md text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-sm" disabled={isSaving}>
                         Cancel
                     </button>
-                    <button onClick={handleImport} className="px-4 py-2 rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-wait text-sm font-medium" disabled={isSaving || !text.trim()}>
-                        {isSaving ? 'Importing...' : `Import ${importMode === 'csv' ? 'from CSV' : 'Cards'}`}
+                    <button
+                        onClick={handleImport}
+                        className={`px-4 py-2 rounded-md text-white ${importMode === 'path' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-blue-600 hover:bg-blue-700'} disabled:opacity-50 disabled:cursor-wait text-sm font-medium`}
+                        disabled={isSaving || (importMode !== 'path' && !text.trim()) || (importMode === 'path' && !localPath.trim())}
+                    >
+                        {isSaving ? 'Importing...' : importMode === 'path' ? 'Quick Import' : `Import ${importMode === 'csv' ? 'from CSV' : 'Cards'}`}
                     </button>
                 </div>
             </div>
