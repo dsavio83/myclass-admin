@@ -336,7 +336,6 @@ const QAImportModal: React.FC<{
         }
 
         // Extract Average/Cognitive Process (e.g., Average: CP1)
-        // User requested "Average" keyword, mapping to Cognitive Process
         const cpMatch = cleanContent.match(/Average\s*[:\-]\s*(CP[1-7])/i);
         if (cpMatch) {
             const val = cpMatch[1].toUpperCase();
@@ -349,17 +348,16 @@ const QAImportModal: React.FC<{
         return { cleanContent, meta };
     };
 
+    const updateParsedItem = (idx: number, field: 'marks' | 'type' | 'cognitiveProcess', value: any) => {
+        setParsedItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
+    };
+
     const parseText = () => {
         if (!text.trim()) return;
 
-        // Pre-process text to handle inline breaks
-        // Ensure Questions start on new line
         let processedText = text
-            // Handle "Question 1 :", "Q1 :", "கேள்வி 1 :", "வினா 1 :" (allowing space before delimiter)
             .replace(/([^\n])\s*((?:Q|Question|கேள்வி|வினா|கே|வி)\s*\d*\s*[\.\)\:])/gi, '$1\n$2')
-            // Handle plain numbers "1 :", "1 )" if they look like start of question
             .replace(/([^\n])\s+(\d+\s*[\.\)\:])/g, '$1\n$2')
-            // Handle Answers "Ans :", "Answer :", "பதில் :", "விடை :"
             .replace(/([^\n])\s*((?:A|Ans|Answer|பதில்|விடை|வி)\s*[\.\)\:])/gi, '$1\n$2');
 
         const items: ParsedQA[] = [];
@@ -372,27 +370,23 @@ const QAImportModal: React.FC<{
 
         const finalizeItem = () => {
             if (currentQ && currentA) {
-                // Extract metadata from Question text
                 const { cleanContent, meta } = extractMetadata(currentQ);
-
                 items.push({
                     id: ++currentId,
                     question: cleanContent.trim(),
                     answer: currentA.trim(),
                     isValid: true,
-                    ...meta
+                    // Use inline-parsed metadata if found, otherwise fall back to defaults
+                    marks: meta.marks ?? defaultMarks,
+                    type: meta.type ?? defaultType,
+                    cognitiveProcess: meta.cognitiveProcess ?? defaultCP,
                 });
             }
             currentQ = '';
             currentA = '';
         };
 
-        // Regex to identify start of a Question
-        // Supports: Q1, Question 1, 1., வினா 1, கேள்வி 1, etc. (with optional space before punctuation)
         const qStartRegex = /^(?:Q|Question|கேள்வி|வினா)?\s*\d+\s*[\.\)\:]|^(?:Q|Question|கேள்வி|வினா)\s*[\.\)\:]/i;
-
-        // Regex to identify start of an Answer
-        // Supports: Ans, Answer, A, பதில், விடை (with optional space before punctuation)
         const aStartRegex = /^(?:A|Ans|Answer|பதில்|விடை)\s*[\.\)\:]/i;
 
         for (const line of lines) {
@@ -401,17 +395,11 @@ const QAImportModal: React.FC<{
 
             if (qStartRegex.test(trimmedLine)) {
                 finalizeItem();
-                // Check if it's strictly just a number which might be a list inside an answer
-                // However, our pre-processing tries to force newlines for potential questions. 
-                // We assume if it matches qStartRegex at the start of a trimmed line, it's a new question.
-
-                // Remove the prefix (e.g. "Q1 :", "கேள்வி 1 :") to get the content
                 const cleanLine = trimmedLine.replace(/^(?:Q|Question|கேள்வி|வினா)?\s*\d*\s*[\.\)\:]\s*/i, '').trim();
                 currentQ = cleanLine;
                 isCollectingQ = true;
                 isCollectingA = false;
             } else if (aStartRegex.test(trimmedLine)) {
-                // Remove prefix (e.g. "Ans:", "பதில்:")
                 const cleanLine = trimmedLine.replace(/^(?:A|Ans|Answer|பதில்|விடை)\s*[\.\)\:]\s*/i, '').trim();
                 currentA = cleanLine;
                 isCollectingQ = false;
@@ -451,7 +439,6 @@ const QAImportModal: React.FC<{
             setStep('input');
         } catch (e) {
             console.error(e);
-            // Error handling usually in parent
         } finally {
             setIsImporting(false);
         }
@@ -475,38 +462,19 @@ const QAImportModal: React.FC<{
                 <div className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900/50">
                     {step === 'input' ? (
                         <div className="space-y-4 h-full flex flex-col">
-                            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800 text-sm text-blue-800 dark:text-blue-200">
-                                <strong>Instructions:</strong> Paste your Q&A text below. Supports English and Tamil formats.<br />
-                                Examples:<br />
-                                <code>Q1. What is React?</code> ... <code>Ans: A library...</code><br />
-                                Auto-splits text based on markers: Q, Question, Ans, Answer, கேள்வி, வினா, பதில், விடை.<br />
-                                <br />
-                                <strong>Metadata Keywords:</strong><br />
-                                <code>Mark: 5</code> (Sets marks)<br />
-                                <code>Type: Average</code> (Sets type: Basic, Average, Profound)<br />
-                                <code>Average: CP2</code> (Sets Cognitive Process: CP1-CP7)
-                            </div>
-                            <textarea
-                                value={text}
-                                onChange={e => setText(e.target.value)}
-                                className="flex-1 w-full p-4 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 font-mono text-sm leading-relaxed"
-                                placeholder={`Q1. Question 1 text here...\nMark: 2\nType: Basic\nAverage: CP1\nAns: Answer text here...\n\nQ2. Question 2 text here...\nAns: Answer text here...`}
-                            />
-                        </div>
-                    ) : (
-                        <div className="space-y-6">
+                            {/* Default Metadata — shown in input step so values apply on parse */}
                             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-                                <h3 className="text-sm font-bold text-gray-500 uppercase mb-3">Default Metadata (Applied to all)</h3>
+                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Default Metadata <span className="font-normal normal-case text-gray-400 ml-1">(applied to all questions unless overridden inline)</span></h3>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
                                         <label className="text-xs font-medium text-gray-500 mb-1 block">Marks</label>
-                                        <select value={defaultMarks} onChange={e => setDefaultMarks(Number(e.target.value))} className="w-full text-sm rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-gray-900">
+                                        <select value={defaultMarks} onChange={e => setDefaultMarks(Number(e.target.value))} className="w-full text-sm rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-gray-900 py-1.5">
                                             {[1, 2, 3, 4, 5, 6].map(m => <option key={m} value={m}>{m} Marks</option>)}
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="text-xs font-medium text-gray-500 mb-1 block">Type</label>
-                                        <select value={defaultType} onChange={e => setDefaultType(e.target.value as any)} className="w-full text-sm rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-gray-900">
+                                        <label className="text-xs font-medium text-gray-500 mb-1 block">Question Type</label>
+                                        <select value={defaultType} onChange={e => setDefaultType(e.target.value as any)} className="w-full text-sm rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-gray-900 py-1.5">
                                             <option value="Basic">Basic</option>
                                             <option value="Average">Average</option>
                                             <option value="Profound">Profound</option>
@@ -514,39 +482,73 @@ const QAImportModal: React.FC<{
                                     </div>
                                     <div>
                                         <label className="text-xs font-medium text-gray-500 mb-1 block">Cognitive Process</label>
-                                        <select value={defaultCP} onChange={e => setDefaultCP(e.target.value as any)} className="w-full text-sm rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-gray-900">
+                                        <select value={defaultCP} onChange={e => setDefaultCP(e.target.value as any)} className="w-full text-sm rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-gray-900 py-1.5">
                                             {Object.entries(COGNITIVE_PROCESSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                                         </select>
                                     </div>
                                 </div>
                             </div>
-
-                            <div className="space-y-4">
-                                <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 flex justify-between">
-                                    <span>Parsed Items ({parsedItems.length})</span>
-                                    <button onClick={() => setStep('input')} className="text-indigo-600 dark:text-indigo-400 text-xs hover:underline">Edit Input</button>
-                                </h3>
-                                {parsedItems.map((item, idx) => (
-                                    <div key={idx} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 relative">
-                                        {(item.marks || item.type || item.cognitiveProcess) && (
-                                            <div className="absolute top-2 right-2 flex gap-1">
-                                                {item.marks && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600">Mark: {item.marks}</span>}
-                                                {item.type && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600">Type: {item.type}</span>}
-                                                {item.cognitiveProcess && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600">CP: {item.cognitiveProcess}</span>}
-                                            </div>
-                                        )}
-                                        <div className="font-semibold text-gray-900 dark:text-gray-100 mb-2 flex gap-2 pr-20">
-                                            <span className="text-indigo-500 shrink-0">Q{idx + 1}:</span>
-                                            <span dangerouslySetInnerHTML={{ __html: processContentForHTML(item.question) }} />
+                            <textarea
+                                value={text}
+                                onChange={e => setText(e.target.value)}
+                                className="flex-1 w-full p-4 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 font-mono text-sm leading-relaxed"
+                                placeholder={`Q1. Question 1 text here...\nAns: Answer text here...\n\nQ2. Question 2 text here...\nAns: Answer text here...`}
+                            />
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">Parsed Items ({parsedItems.length})</h3>
+                                <button onClick={() => setStep('input')} className="text-indigo-600 dark:text-indigo-400 text-xs hover:underline">← Edit Input</button>
+                            </div>
+                            {parsedItems.map((item, idx) => (
+                                <div key={idx} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                                    <div className="font-semibold text-gray-900 dark:text-gray-100 mb-1 flex gap-2">
+                                        <span className="text-indigo-500 shrink-0">Q{idx + 1}:</span>
+                                        <span dangerouslySetInnerHTML={{ __html: processContentForHTML(item.question) }} />
+                                    </div>
+                                    <div className="text-gray-600 dark:text-gray-300 ml-4 flex gap-2 mb-3">
+                                        <span className="text-green-600 font-medium shrink-0">Ans:</span>
+                                        <span dangerouslySetInnerHTML={{ __html: processContentForHTML(item.answer) }} />
+                                    </div>
+                                    {/* Per-question metadata editors */}
+                                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100 dark:border-gray-700 mt-1">
+                                        <div>
+                                            <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5 block">Marks</label>
+                                            <select
+                                                value={item.marks ?? defaultMarks}
+                                                onChange={e => updateParsedItem(idx, 'marks', Number(e.target.value))}
+                                                className="w-full text-xs rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-gray-900 py-1"
+                                            >
+                                                {[1, 2, 3, 4, 5, 6].map(m => <option key={m} value={m}>{m} Marks</option>)}
+                                            </select>
                                         </div>
-                                        <div className="text-gray-600 dark:text-gray-300 ml-4 flex gap-2">
-                                            <span className="text-green-600 font-medium shrink-0">Ans:</span>
-                                            <span dangerouslySetInnerHTML={{ __html: processContentForHTML(item.answer) }} />
+                                        <div>
+                                            <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5 block">Type</label>
+                                            <select
+                                                value={item.type ?? defaultType}
+                                                onChange={e => updateParsedItem(idx, 'type', e.target.value as QuestionType)}
+                                                className="w-full text-xs rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-gray-900 py-1"
+                                            >
+                                                <option value="Basic">Basic</option>
+                                                <option value="Average">Average</option>
+                                                <option value="Profound">Profound</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5 block">Cognitive Process</label>
+                                            <select
+                                                value={item.cognitiveProcess ?? defaultCP}
+                                                onChange={e => updateParsedItem(idx, 'cognitiveProcess', e.target.value as CognitiveProcess)}
+                                                className="w-full text-xs rounded border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-gray-900 py-1"
+                                            >
+                                                {Object.entries(COGNITIVE_PROCESSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                                            </select>
                                         </div>
                                     </div>
-                                ))}
-                                {parsedItems.length === 0 && <div className="text-center text-gray-500">No items parsed. Check your format.</div>}
-                            </div>
+                                </div>
+                            ))}
+                            {parsedItems.length === 0 && <div className="text-center text-gray-500 py-8">No items parsed. Check your format.</div>}
                         </div>
                     )}
                 </div>

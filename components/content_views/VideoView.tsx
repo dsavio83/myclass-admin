@@ -71,22 +71,23 @@ const SavedVideoViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
     useEffect(() => {
         const src = getVideoSrc();
         setVideoSrc(src);
-        const isYouTubeVideo = src && src.includes('youtube.com/embed/');
-        setVideoLoading(isYouTubeVideo ? false : (src ? true : false));
+        setVideoLoading(false); // Don't hide the video element — let browser load naturally
         setVideoError(null);
     }, [content]);
 
+    // Restore background media state once on mount
     useEffect(() => {
-        const videoEl = videoRef.current;
         if (mediaState && mediaState.id === content._id) {
+            const videoEl = videoRef.current;
             if (videoEl) {
                 videoEl.currentTime = mediaState.currentTime;
                 if (mediaState.isPlaying) videoEl.play().catch(() => { });
             }
             closeMedia();
         }
+        // Save media state to background context only when unmounting
         return () => {
-            const vid = videoEl;
+            const vid = videoRef.current;
             if (vid && !vid.paused && !vid.ended && vid.currentTime > 0) {
                 playMedia({
                     id: content._id,
@@ -97,19 +98,22 @@ const SavedVideoViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
                     duration: vid.duration,
                     isPlaying: true
                 });
-            } else if (!vid && videoSrc && videoSrc.includes('youtube.com/embed/')) {
-                playMedia({
-                    id: content._id,
-                    url: videoSrc,
-                    title: content.title,
-                    type: 'video',
-                    currentTime: 0,
-                    duration: 0,
-                    isPlaying: true
-                });
+            } else {
+                const src = getVideoSrc();
+                if (src && src.includes('youtube.com/embed/')) {
+                    playMedia({
+                        id: content._id,
+                        url: src,
+                        title: content.title,
+                        type: 'video',
+                        currentTime: 0,
+                        duration: 0,
+                        isPlaying: true
+                    });
+                }
             }
         };
-    }, [videoSrc]);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         if (content._id && lessonId) {
@@ -149,16 +153,16 @@ const SavedVideoViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
             )}
 
             <div className="aspect-video w-full bg-black relative">
-                {videoLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center z-10 bg-black/40 backdrop-blur-sm">
-                        <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                )}
-
                 {videoSrc && videoSrc.includes('youtube.com/embed/') ? (
                     <iframe src={videoSrc} className="w-full h-full" title={content.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
                 ) : videoSrc ? (
-                    <video controls className="w-full h-full" src={videoSrc} onError={handleVideoError} onPlay={() => closeMedia()} ref={videoRef} style={{ display: videoLoading ? 'none' : 'block' }} />
+                    <video
+                        controls
+                        className="w-full h-full"
+                        src={videoSrc}
+                        onError={handleVideoError}
+                        ref={videoRef}
+                    />
                 ) : null}
 
                 {videoError && (
