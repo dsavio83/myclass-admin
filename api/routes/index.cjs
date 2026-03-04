@@ -582,7 +582,8 @@ router.post('/upload', upload.single('file'), async (req, res) => {
                     folder: uploadFolder,
                     public_id: desiredFileName, // Set custom name
                     use_filename: true,
-                    unique_filename: true // Appends random chars if collision
+                    unique_filename: true, // Appends random chars if collision
+                    timeout: 300000 // 5 minute SDK timeout
                 },
                 (err, result) => {
                     clearTimeout(timeout);
