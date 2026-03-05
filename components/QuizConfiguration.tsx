@@ -172,8 +172,16 @@ const ImportJsonModal: React.FC<{
                 throw new Error("JSON must be an array of questions.");
             }
 
-            console.log('[sanitizeAndParse] Successfully parsed:', parsed.length, 'questions');
-            return parsed;
+            const normalized = parsed.map((q: any) => ({
+                question: q?.question || '',
+                hint: q?.hint || '',
+                answerOptions: Array.isArray(q?.answerOptions) ? q.answerOptions :
+                    Array.isArray(q?.answerOption) ? q.answerOption :
+                        Array.isArray(q?.options) ? q.options : []
+            }));
+
+            console.log('[sanitizeAndParse] Successfully parsed:', normalized.length, 'questions');
+            return normalized;
         } catch (e) {
             console.error('[sanitizeAndParse] First parsing attempt failed:', e.message);
             console.error('[sanitizeAndParse] Attempting automatic JSON fixing...');
@@ -187,8 +195,15 @@ const ImportJsonModal: React.FC<{
                     if (!Array.isArray(parsed)) {
                         throw new Error("JSON must be an array of questions.");
                     }
-                    console.log('[sanitizeAndParse] Successfully parsed after auto-fix:', parsed.length, 'questions');
-                    return parsed;
+                    const normalized = parsed.map((q: any) => ({
+                        question: q?.question || '',
+                        hint: q?.hint || '',
+                        answerOptions: Array.isArray(q?.answerOptions) ? q.answerOptions :
+                            Array.isArray(q?.answerOption) ? q.answerOption :
+                                Array.isArray(q?.options) ? q.options : []
+                    }));
+                    console.log('[sanitizeAndParse] Successfully parsed after auto-fix:', normalized.length, 'questions');
+                    return normalized;
                 }
             } catch (fixError) {
                 console.error('[sanitizeAndParse] Auto-fix failed:', fixError.message);
@@ -444,7 +459,15 @@ export const QuizConfiguration: React.FC<QuizConfigurationProps> = ({ lessonIdPr
                 .replace(/&#62;/g, '>')           // Replace &#62; with >
                 .replace(/[\u201C\u201D]/g, '"')  // Replace smart quotes with "
                 .replace(/[\u2018\u2019]/g, "'"); // Replace smart single quotes with '
-            setQuestions(JSON.parse(cleanBody));
+            const parsed = JSON.parse(cleanBody);
+            const normalized = Array.isArray(parsed) ? parsed.map((q: any) => ({
+                question: q?.question || '',
+                hint: q?.hint || '',
+                answerOptions: Array.isArray(q?.answerOptions) ? q.answerOptions :
+                    Array.isArray(q?.answerOption) ? q.answerOption :
+                        Array.isArray(q?.options) ? q.options : []
+            })) : [];
+            setQuestions(normalized);
         } catch (e) {
             console.error("Failed to parse quiz", e);
             setQuestions([]);
@@ -1016,7 +1039,7 @@ export const QuizConfiguration: React.FC<QuizConfigurationProps> = ({ lessonIdPr
                                         {/* Answer Options */}
                                         <div className="space-y-3">
                                             <label className="block text-xs font-medium text-gray-500 uppercase">Answer Options</label>
-                                            {q.answerOptions.map((opt, oIndex) => (
+                                            {(q.answerOptions || []).map((opt, oIndex) => (
                                                 <div key={oIndex} className="flex gap-3 items-start bg-gray-50 dark:bg-gray-700/50 p-3 rounded-md">
                                                     <div className="pt-2">
                                                         <input

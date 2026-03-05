@@ -11,6 +11,7 @@ import { BackgroundTaskProgress } from './components/common/BackgroundTaskProgre
 import { BackgroundMediaProvider } from './context/BackgroundMediaContext';
 import { BackgroundMediaPlayer } from './components/common/BackgroundMediaPlayer';
 import { setupDebugKeyboardShortcuts } from './utils/navigationUtils';
+import { OfflineIndicator } from './components/common/OfflineIndicator';
 
 const AppContent: React.FC = () => {
   const { session } = useSession();
@@ -50,6 +51,7 @@ const App: React.FC = () => {
               <AppContent />
               <BackgroundTaskProgress />
               <BackgroundMediaPlayer />
+              <OfflineIndicator />
             </BackgroundMediaProvider>
           </BackgroundTaskProvider>
         </ContentUpdateProvider>
