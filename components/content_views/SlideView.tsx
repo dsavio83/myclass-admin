@@ -367,7 +367,7 @@ const RunningPdfViewer: React.FC<{ url: string; onPdfLoad: (pdf: any) => void; i
     const [pdfDoc, setPdfDoc] = useState<any>(null);
     const [scale, setScale] = useState(1.0);
     const containerRef = useRef<HTMLDivElement>(null);
-    const rotation = isMobile ? 90 : 0;
+    const rotation = 0;
 
     useEffect(() => {
         if (!url) return;

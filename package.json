@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:api": "cd api && npm run dev",
+    "dev:all": "start cmd /c node dev-all.js",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -39,6 +40,7 @@
     "@types/react": "^19.2.7",
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.23",
+    "concurrently": "^9.2.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.8.2",
