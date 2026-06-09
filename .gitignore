@@ -6,6 +6,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+# Uploads and temporary files
+api/uploads/
+test1mb.pdf
+api_log.txt
+build_error.txt
+upload_result.txt
 
 node_modules
 dist
@@ -23,5 +29,9 @@ dist-ssr
 *.sln
 *.sw?
 
+# Environment variables
 .env
 api/.env
+
+# Vercel
+.vercel
