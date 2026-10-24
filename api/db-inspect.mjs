@@ -1,0 +1,13 @@
+import "dotenv/config";
+import mongoose from "mongoose";
+await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 15000 });
+const db = mongoose.connection.db;
+const cols = (await db.listCollections().toArray()).map(c => c.name);
+console.log("collections:", cols.join(", "));
+const wm = await db.collection("webmasters").find({}).toArray();
+console.log("webmasters count:", wm.length);
+wm.forEach(w => console.log("  _id:", w._id, "| username:", w.username, "| password:", String(w.password).slice(0,40)));
+const u = await db.collection("users").find({}).limit(10).toArray();
+console.log("users count(sample):", u.length);
+u.forEach(x => console.log("  username:", x.username, "| role:", x.role, "| password:", String(x.password).slice(0,30)));
+await mongoose.disconnect();

@@ -354,13 +354,47 @@ const Flashcard: React.FC<{
     );
 };
 
+const CheckCircleIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+);
+
+const XCircleIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+);
+
 // --- Thank You Screen Component ---
-const ThankYouScreen: React.FC<{ onRetry: () => void }> = ({ onRetry }) => (
-    <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-sm z-20 flex flex-col items-center justify-center p-4 text-center">
+const ThankYouScreen: React.FC<{ 
+    onRetry: () => void; 
+    results: { correct: number; wrong: number };
+    total: number;
+}> = ({ onRetry, results, total }) => (
+    <div className="absolute inset-0 bg-gray-900/90 backdrop-blur-md z-20 flex flex-col items-center justify-center p-4 text-center">
         <Fireworks />
-        <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">Great Job!</h2>
-        <p className="text-lg text-gray-300 mb-8">You've reviewed all the flashcards.</p>
-        <button onClick={onRetry} className="px-8 py-3 bg-blue-600 text-white font-semibold rounded-full hover:bg-blue-700 transition-transform transform hover:scale-105 shadow-lg">
+        <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">Review Complete!</h2>
+        
+        <div className="flex gap-8 mb-8">
+            <div className="flex flex-col items-center p-6 bg-green-500/20 border border-green-500/30 rounded-2xl">
+                <CheckCircleIcon className="w-12 h-12 text-green-400 mb-2" />
+                <span className="text-3xl font-bold text-green-400">{results.correct}</span>
+                <span className="text-sm text-green-200 mt-1 uppercase tracking-wider">Correct</span>
+            </div>
+            
+            <div className="flex flex-col items-center p-6 bg-red-500/20 border border-red-500/30 rounded-2xl">
+                <XCircleIcon className="w-12 h-12 text-red-400 mb-2" />
+                <span className="text-3xl font-bold text-red-400">{results.wrong}</span>
+                <span className="text-sm text-red-200 mt-1 uppercase tracking-wider">Wrong</span>
+            </div>
+        </div>
+
+        <p className="text-lg text-gray-300 mb-8">
+            You got <span className="font-bold text-white">{results.correct}</span> out of {total} right.
+        </p>
+
+        <button onClick={onRetry} className="px-10 py-4 bg-gradient-to-r from-blue-600 to-violet-600 text-white font-bold rounded-full hover:from-blue-500 hover:to-violet-500 transition-all transform hover:scale-105 shadow-xl shadow-blue-900/20">
             Start Over
         </button>
     </div>
@@ -370,6 +404,9 @@ const ThankYouScreen: React.FC<{ onRetry: () => void }> = ({ onRetry }) => (
 export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
     const { triggerContentUpdate } = useContentUpdate();
+
+    // Validation state
+    const [results, setResults] = useState<{ correct: number; wrong: number }>({ correct: 0, wrong: 0 });
 
     // Debug logging to track lessonId changes
     useEffect(() => {
@@ -404,6 +441,23 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
     }, [lessonId]);
 
     const flashcards = useMemo(() => groupedContent?.[0]?.docs || [], [groupedContent]);
+
+    // Load saved results on mount
+    useEffect(() => {
+        const savedResults = sessionStorage.getItem(`flashcard-results-${lessonId}`);
+        if (savedResults) {
+            try {
+                setResults(JSON.parse(savedResults));
+            } catch (e) {
+                console.error("Error parsing saved results", e);
+            }
+        }
+    }, [lessonId]);
+
+    // Save results to session storage whenever they change
+    useEffect(() => {
+        sessionStorage.setItem(`flashcard-results-${lessonId}`, JSON.stringify(results));
+    }, [results, lessonId]);
 
     // Increment view count for the current card
     useEffect(() => {
@@ -458,6 +512,14 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
         }
     }, [currentCardIndex, flashcards.length]);
 
+    const handleValidation = useCallback((isCorrect: boolean) => {
+        setResults(prev => ({
+            ...prev,
+            [isCorrect ? 'correct' : 'wrong']: prev[isCorrect ? 'correct' : 'wrong'] + 1
+        }));
+        handleNext();
+    }, [handleNext]);
+
     const handlePrev = useCallback(() => {
         setShowThankYou(false);
         if (currentCardIndex > 0) {
@@ -473,6 +535,8 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
     const handleRetry = () => {
         setCurrentCardIndex(0);
         setShowThankYou(false);
+        setResults({ correct: 0, wrong: 0 });
+        sessionStorage.removeItem(`flashcard-results-${lessonId}`);
     };
 
     useEffect(() => {
@@ -702,6 +766,24 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
                     </div>
 
                     <div className="w-full max-w-3xl flex flex-col items-center z-10">
+                        {/* Validation Buttons */}
+                        <div className="flex items-center justify-center gap-6 w-full mb-6 mt-4">
+                            <button 
+                                onClick={() => handleValidation(false)}
+                                className="flex items-center justify-center gap-2 px-6 py-3 bg-white dark:bg-gray-800 border-2 border-red-500/20 text-red-600 dark:text-red-400 font-bold rounded-xl shadow-sm hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-500/40 transition-all active:scale-95"
+                            >
+                                <XCircleIcon className="w-6 h-6" />
+                                <span>Wrong</span>
+                            </button>
+                            <button 
+                                onClick={() => handleValidation(true)}
+                                className="flex items-center justify-center gap-2 px-6 py-3 bg-white dark:bg-gray-800 border-2 border-green-500/20 text-green-600 dark:text-green-400 font-bold rounded-xl shadow-sm hover:bg-green-50 dark:hover:bg-green-900/20 hover:border-green-500/40 transition-all active:scale-95"
+                            >
+                                <CheckCircleIcon className="w-6 h-6" />
+                                <span>Correct</span>
+                            </button>
+                        </div>
+
                         <div className="flex items-center justify-between w-full mb-3 px-2">
                             <button onClick={handlePrev} disabled={currentCardIndex === 0} className="px-4 py-2 sm:px-6 rounded-full bg-white dark:bg-gray-800 shadow-md text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
                                 <ChevronLeftIcon className="w-5 h-5" />
@@ -723,7 +805,7 @@ export const FlashcardView: React.FC<FlashcardViewProps> = ({ lessonId, user }) 
                         </div>
                     </div>
 
-                    {showThankYou && <ThankYouScreen onRetry={handleRetry} />}
+                    {showThankYou && <ThankYouScreen onRetry={handleRetry} results={results} total={flashcards.length} />}
                 </div>
             </div>
 

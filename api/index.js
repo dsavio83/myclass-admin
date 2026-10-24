@@ -54,6 +54,26 @@ const connectToDatabase = async () => {
         console.log('✓ MongoDB Connected Successfully');
     } catch (error) {
         console.error('✗ MongoDB Connection Error:', error && (error.stack || error));
+        const msg = error?.message ?? String(error);
+        if (/bad auth|auth(?:entication)? failed/i.test(msg)) {
+            const shown = uri.replace(/\/\/([^:]+):([^@]*)@/, '//$1:****@');
+            console.error(
+                '\n' +
+                '  ----------------------------------------------------------\n' +
+                '  The MongoDB username exists but the PASSWORD is wrong.\n' +
+                '  This is a credentials problem, not a code problem.\n' +
+                '\n' +
+                `  URI in use: ${shown}\n` +
+                '\n' +
+                '  To fix, in https://cloud.mongodb.com go to\n' +
+                '  Database Access -> dsavio83_db_user -> Edit Password\n' +
+                '  then update MONGODB_URI in api/.env and save the file.\n' +
+                '\n' +
+                '  To check your credentials without starting the server:\n' +
+                '      node test-db-connection.js\n' +
+                '  ----------------------------------------------------------\n'
+            );
+        }
         throw error;
     }
 };

@@ -69,7 +69,8 @@ const useBase64ToBlobUrl = (base64String: string | undefined) => {
 const FullscreenSlideViewer: React.FC<{
     content: Content;
     onClose: () => void;
-}> = ({ content, onClose }) => {
+    startPage?: number;
+}> = ({ content, onClose, startPage = 1 }) => {
     const [isMobile, setIsMobile] = useState(false);
     const [isLandscape, setIsLandscape] = useState(true);
 
@@ -90,8 +91,12 @@ const FullscreenSlideViewer: React.FC<{
     }, []);
     // Handle both base64 content and file-based content
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-    const [currentSlide, setCurrentSlide] = useState(1);
+    const [currentSlide, setCurrentSlide] = useState(startPage);
     const [totalSlides, setTotalSlides] = useState(1);
+
+    useEffect(() => {
+        setCurrentSlide(startPage);
+    }, [startPage]);
 
     const [touchStart, setTouchStart] = useState<number | null>(null);
     const [touchEnd, setTouchEnd] = useState<number | null>(null);
@@ -208,8 +213,19 @@ const FullscreenSlideViewer: React.FC<{
 
     // Sync component closure with native fullscreen exit
     useEffect(() => {
-        const handleFullscreenChange = () => {
+        const handleFullscreenChange = async () => {
             if (!document.fullscreenElement) {
+                const screenObj = window.screen as any;
+                if (screenObj && screenObj.orientation && screenObj.orientation.lock) {
+                    try {
+                        await screenObj.orientation.lock('portrait');
+                    } catch (e) {
+                        console.log('Portrait lock failed on exit:', e);
+                    }
+                }
+                if (screenObj && screenObj.orientation && screenObj.orientation.unlock) {
+                    screenObj.orientation.unlock();
+                }
                 onClose();
             }
         };
@@ -250,10 +266,9 @@ const FullscreenSlideViewer: React.FC<{
         }
     }, [totalSlides]);
 
-    // Update total slides when PDF loads
+    // Stabilized PDF load callback
     const handlePdfLoad = useCallback((pdf: any) => {
         setTotalSlides(pdf.numPages);
-        setCurrentSlide(1);
     }, []);
 
     // Enter native fullscreen automatically when component mounts
@@ -268,7 +283,7 @@ const FullscreenSlideViewer: React.FC<{
     return (
         <div
             ref={containerRef}
-            className="fixed inset-0 bg-black z-50 flex flex-col"
+            className="fixed inset-0 bg-black z-[9999] flex flex-col"
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
@@ -337,12 +352,17 @@ const PdfPage: React.FC<{ pdfDoc: any; pageNum: number; scale: number; rotation?
             try {
                 if (renderTaskRef.current) renderTaskRef.current.cancel();
                 const page = await pdfDoc.getPage(pageNum);
-                const viewport = page.getViewport({ scale, rotation: rotation || undefined });
+                // Use page.rotate if rotation prop is not provided, ensuring correct orientation
+                const actualRotation = (rotation !== undefined && rotation !== 0) ? rotation : page.rotate;
+                const viewport = page.getViewport({ scale, rotation: actualRotation });
                 const canvas = canvasRef.current;
                 const context = canvas.getContext('2d');
                 if (context) {
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
+                    context.fillStyle = 'white';
+                    context.fillRect(0, 0, canvas.width, canvas.height);
+
                     const renderContext = { canvasContext: context, viewport: viewport };
                     const renderTask = page.render(renderContext);
                     renderTaskRef.current = renderTask;
@@ -358,12 +378,12 @@ const PdfPage: React.FC<{ pdfDoc: any; pageNum: number; scale: number; rotation?
 
     return (
         <div className="mb-0 flex justify-center bg-black">
-            <canvas ref={canvasRef} className="max-w-full" />
+            <canvas ref={canvasRef} className="max-w-full bg-white" />
         </div>
     );
 };
 
-const RunningPdfViewer: React.FC<{ url: string; onPdfLoad: (pdf: any) => void; isMobile?: boolean }> = ({ url, onPdfLoad, isMobile = false }) => {
+const RunningPdfViewer: React.FC<{ url: string; onPdfLoad: (pdf: any) => void; onPageClick: (page: number) => void; isMobile?: boolean }> = ({ url, onPdfLoad, onPageClick, isMobile = false }) => {
     const [pdfDoc, setPdfDoc] = useState<any>(null);
     const [scale, setScale] = useState(1.0);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -371,17 +391,22 @@ const RunningPdfViewer: React.FC<{ url: string; onPdfLoad: (pdf: any) => void; i
 
     useEffect(() => {
         if (!url) return;
+        let isMounted = true;
         pdfjsLib.getDocument(url).promise.then(pdf => {
-            setPdfDoc(pdf);
-            onPdfLoad(pdf);
+            if (isMounted) {
+                setPdfDoc(pdf);
+                onPdfLoad(pdf);
+            }
         }).catch(console.error);
-    }, [url]);
+        return () => { isMounted = false; };
+    }, [url, onPdfLoad]);
 
     useEffect(() => {
         const calculateScale = () => {
             if (!pdfDoc || !containerRef.current) return;
             pdfDoc.getPage(1).then((page: any) => {
-                const viewport = page.getViewport({ scale: 1.0, rotation: rotation || undefined });
+                const actualRotation = (rotation !== undefined && rotation !== 0) ? rotation : page.rotate;
+                const viewport = page.getViewport({ scale: 1.0, rotation: actualRotation });
                 const containerWidth = containerRef.current?.clientWidth || window.innerWidth;
                 setScale(containerWidth / viewport.width);
             });
@@ -396,7 +421,9 @@ const RunningPdfViewer: React.FC<{ url: string; onPdfLoad: (pdf: any) => void; i
     return (
         <div ref={containerRef} className="w-full h-full overflow-y-auto scroll-smooth bg-black">
             {Array.from({ length: pdfDoc.numPages }, (_, i) => (
-                <PdfPage key={i + 1} pdfDoc={pdfDoc} pageNum={i + 1} scale={scale} rotation={rotation} />
+                <div key={i + 1} onClick={() => onPageClick(i + 1)} className="cursor-pointer transition-transform hover:scale-[1.01] active:scale-100">
+                    <PdfPage pdfDoc={pdfDoc} pageNum={i + 1} scale={scale} rotation={rotation} />
+                </div>
             ))}
         </div>
     );
@@ -418,27 +445,32 @@ const SlidePdfViewer: React.FC<{
 
     useEffect(() => {
         if (!url) return;
+        let isMounted = true;
         pdfjsLib.getDocument(url).promise.then(pdf => {
-            setPdfDoc(pdf);
-            onPdfLoad(pdf);
+            if (isMounted) {
+                setPdfDoc(pdf);
+                onPdfLoad(pdf);
+            }
         }).catch(console.error);
-    }, [url]);
+        return () => { isMounted = false; };
+    }, [url, onPdfLoad]);
+
+    const calculateOptimalScale = useCallback(() => {
+        if (!pdfDoc || !containerRef.current) return;
+        const container = containerRef.current;
+        pdfDoc.getPage(currentSlide).then((page: any) => {
+            const unscaledViewport = page.getViewport({ scale: 1.0, rotation: page.rotate });
+            const scaleX = container.clientWidth / unscaledViewport.width;
+            const scaleY = container.clientHeight / unscaledViewport.height;
+            setScale(Math.min(scaleX, scaleY));
+        });
+    }, [pdfDoc, currentSlide]);
 
     useEffect(() => {
-        const calculateOptimalScale = () => {
-            if (!pdfDoc || !containerRef.current) return;
-            const container = containerRef.current;
-            pdfDoc.getPage(currentSlide).then((page: any) => {
-                const unscaledViewport = page.getViewport({ scale: 1.0 });
-                const scaleX = container.clientWidth / unscaledViewport.width;
-                const scaleY = container.clientHeight / unscaledViewport.height;
-                setScale(Math.min(scaleX, scaleY));
-            });
-        };
         calculateOptimalScale();
         window.addEventListener('resize', calculateOptimalScale);
         return () => window.removeEventListener('resize', calculateOptimalScale);
-    }, [pdfDoc, currentSlide]);
+    }, [calculateOptimalScale]);
 
     useEffect(() => {
         if (!pdfDoc || !canvasRef.current) return;
@@ -446,12 +478,15 @@ const SlidePdfViewer: React.FC<{
             try {
                 if (renderTaskRef.current) renderTaskRef.current.cancel();
                 const page = await pdfDoc.getPage(currentSlide);
-                const viewport = page.getViewport({ scale });
+                const viewport = page.getViewport({ scale, rotation: page.rotate });
                 const canvas = canvasRef.current;
                 const context = canvas.getContext('2d');
                 if (context) {
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
+                    context.fillStyle = 'white';
+                    context.fillRect(0, 0, canvas.width, canvas.height);
+
                     const renderContext = { canvasContext: context, viewport: viewport };
                     const renderTask = page.render(renderContext);
                     renderTaskRef.current = renderTask;
@@ -466,12 +501,12 @@ const SlidePdfViewer: React.FC<{
 
     return (
         <div ref={containerRef} className="w-full h-full flex items-center justify-center bg-black overflow-hidden select-none">
-            <canvas ref={canvasRef} className="shadow-2xl max-w-full max-h-full object-contain" />
+            <canvas ref={canvasRef} className="shadow-2xl max-w-full max-h-full object-contain bg-white" />
         </div>
     );
 };
 
-const SavedSlideViewer: React.FC<{ content: Content; onRemove: () => void; isAdmin: boolean; onExpand: () => void; onTogglePublish?: () => void }> = ({
+const SavedSlideViewer: React.FC<{ content: Content; onRemove: () => void; isAdmin: boolean; onExpand: (page?: number) => void; onTogglePublish?: () => void }> = ({
     content,
     onRemove,
     isAdmin,
@@ -568,7 +603,7 @@ const SavedSlideViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
                     </button>
                 )}
                 <button
-                    onClick={onExpand}
+                    onClick={() => onExpand(1)}
                     className={`${isMobile ? 'p-3' : 'p-2'} rounded-full bg-white/50 dark:bg-black/50 hover:bg-white/80 dark:hover:bg-black/80 backdrop-blur-sm shadow-md`}
                     title="View Fullscreen"
                 >
@@ -585,7 +620,7 @@ const SavedSlideViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
                 )}
             </div>
 
-            <h2 className={`text-lg p-3 font-semibold pr-24 shrink-0 text-gray-800 dark:text-white truncate ${isMobile ? 'hidden' : ''}`} title={content.title}>
+            <h2 className="hidden text-lg p-3 font-semibold pr-24 shrink-0 text-gray-800 dark:text-white truncate" title={content.title}>
                 {content.title}
             </h2>
 
@@ -595,7 +630,7 @@ const SavedSlideViewer: React.FC<{ content: Content; onRemove: () => void; isAdm
                     onDoubleClick={handleDoubleClick}
                     title={isMobile ? "Double-click to view in fullscreen" : "View in Fullscreen"}
                 >
-                    <RunningPdfViewer url={pdfUrl} onPdfLoad={() => { }} isMobile={isMobile} />
+                    <RunningPdfViewer url={pdfUrl} onPdfLoad={() => { }} onPageClick={onExpand} isMobile={isMobile} />
 
                     {/* Hover hint - Mobile only */}
                     {isMobile && (
@@ -865,8 +900,7 @@ const UploadForm: React.FC<{ lessonId: string; onUpload: () => void; onExpand: (
 export const SlideView: React.FC<SlideViewProps> = ({ lessonId, user }) => {
     const [version, setVersion] = useState(0);
     const { triggerContentUpdate, updateVersion } = useContentUpdate();
-    const [fullscreenUrl, setFullscreenUrl] = useState<string | null>(null);
-    const [fullscreenMode, setFullscreenMode] = useState(false);
+    const [fullscreenState, setFullscreenState] = useState<{ content: Content; page: number } | null>(null);
 
     useEffect(() => {
         console.log('[SlideView] LessonId changed:', lessonId);
@@ -897,7 +931,6 @@ export const SlideView: React.FC<SlideViewProps> = ({ lessonId, user }) => {
     }, [lessonId, isLoading, slideContent?._id]);
 
     const handleView = (url: string, id: string) => {
-        setFullscreenUrl(url);
         if (lessonId) {
             trackView(lessonId, 'slide', id).catch(err => console.error('Error tracking view:', err));
         }
@@ -943,7 +976,7 @@ export const SlideView: React.FC<SlideViewProps> = ({ lessonId, user }) => {
                             content={slideContent}
                             onRemove={() => handleDelete(slideContent._id)}
                             isAdmin={canEdit}
-                            onExpand={() => setFullscreenMode(true)}
+                            onExpand={(page = 1) => setFullscreenState({ content: slideContent, page })}
                             onTogglePublish={canEdit ? handleTogglePublish : undefined}
                         />
                     )}
@@ -972,10 +1005,11 @@ export const SlideView: React.FC<SlideViewProps> = ({ lessonId, user }) => {
                 message="Are you sure you want to remove these slides? This action cannot be undone."
             />
 
-            {fullscreenMode && slideContent && (
+            {fullscreenState && (
                 <FullscreenSlideViewer
-                    content={slideContent}
-                    onClose={() => setFullscreenMode(false)}
+                    content={fullscreenState.content}
+                    startPage={fullscreenState.page}
+                    onClose={() => setFullscreenState(null)}
                 />
             )}
         </div>
