@@ -9,7 +9,7 @@
     "dev:all": "start cmd /c node dev-all.js",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node build.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "axios": "^1.20.0",
@@ -52,7 +52,7 @@
     "node": "24.x"
   },
   "description": "This contains everything you need to run your app locally.",
-  "main": "build.js",
+  "main": "server.js",
   "directories": {
     "doc": "docs",
     "lib": "lib"

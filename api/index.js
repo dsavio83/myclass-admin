@@ -1,4 +1,4 @@
-// api/index.js - Trigger restart 20
+// api/index.js - Trigger restart 21
 import dotenv from 'dotenv';
 import express from 'express';
 import mongoose from 'mongoose';
@@ -10,10 +10,14 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load environment variables from process.cwd(), api/.env, and root .env
+// Preserve any PORT set by Hostinger / host environment before loading .env files
+const hostPort = process.env.PORT;
 dotenv.config();
 dotenv.config({ path: path.join(__dirname, '.env') });
 dotenv.config({ path: path.join(__dirname, '../.env') });
+if (hostPort) {
+    process.env.PORT = hostPort;
+}
 
 // If your routes are ESM: import normally.
 // If your routes are CommonJS (use require), either convert them or rename to .cjs and import dynamically.
@@ -109,13 +113,13 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Root endpoint & SPA fallback
+// Root endpoint & SPA fallback (works for all Express versions)
 if (fs.existsSync(distPath)) {
-    app.get('/{*splat}', (req, res, next) => {
-        if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/health')) {
-            return next();
+    app.use((req, res, next) => {
+        if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/uploads') && !req.path.startsWith('/health')) {
+            return res.sendFile(path.join(distPath, 'index.html'));
         }
-        res.sendFile(path.join(distPath, 'index.html'));
+        next();
     });
 } else {
     app.get('/', (req, res) => {
@@ -128,28 +132,28 @@ if (fs.existsSync(distPath)) {
 }
 
 // Server startup for direct Node.js execution
-export const startServer = async () => {
+export const startServer = async (customPort) => {
     try {
-        const rawPort = process.env.PORT || 3000;
-        const isNumeric = !isNaN(Number(rawPort));
-        const port = isNumeric ? Number(rawPort) : rawPort;
+        // Priority: customPort > process.env.PORT > 3000 (Hostinger default)
+        const PORT = customPort || process.env.PORT || 3000;
 
-        // 1. Immediately bind to port/socket so Hostinger proxy never gets 503
-        const server = isNumeric
-            ? app.listen(port, '0.0.0.0', () => {
-                console.log(`✓ Production Server listening on http://0.0.0.0:${port}`);
-                console.log(`✓ Web app available at http://localhost:${port}`);
-                console.log(`✓ Health check available at http://localhost:${port}/health`);
-                console.log(`✓ API endpoints available at http://localhost:${port}/api`);
-            })
-            : app.listen(port, () => {
-                console.log(`✓ Production Server listening on socket: ${port}`);
-            });
+        // Immediately bind to port without host restriction so Hostinger NGINX proxy connects instantly
+        const server = app.listen(PORT, () => {
+            console.log(`✓ Production Server running on port ${PORT}`);
+            console.log(`✓ Web app available at http://localhost:${PORT}`);
+            console.log(`✓ Health check available at http://localhost:${PORT}/health`);
+            console.log(`✓ API endpoints available at http://localhost:${PORT}/api`);
+        });
+
+        // Handle listen errors gracefully without crashing the process
+        server.on('error', (err) => {
+            console.error(`✗ Server error on port ${PORT}:`, err && (err.message || err));
+        });
 
         // Increase timeout to 5 minutes for large uploads
         server.setTimeout(5 * 60 * 1000);
 
-        // 2. Connect to database in background
+        // Connect to database in background
         connectToDatabase().catch((err) => {
             console.error('Database connection failed during startup:', err);
         });
