@@ -14,17 +14,17 @@ describe('MongoDB Configuration & Security Suite', () => {
         assert.equal(maskMongoUri(null), 'not-configured');
     });
 
-    it('getMongoUri should strip enclosing double or single quotes', () => {
+    it('getMongoUri should strip enclosing double or single quotes and append authSource=admin', () => {
         const original = process.env.MONGODB_URI;
         try {
-            process.env.MONGODB_URI = '"mongodb+srv://user:pass@host/db"';
-            assert.equal(getMongoUri(), 'mongodb+srv://user:pass@host/db');
+            process.env.MONGODB_URI = '"mongodb+srv://user:pass@host/db?retryWrites=true"';
+            assert.equal(getMongoUri(), 'mongodb+srv://user:pass@host/db?retryWrites=true&authSource=admin');
 
             process.env.MONGODB_URI = "'mongodb+srv://user:pass@host/db'";
-            assert.equal(getMongoUri(), 'mongodb+srv://user:pass@host/db');
+            assert.equal(getMongoUri(), 'mongodb+srv://user:pass@host/db?authSource=admin');
 
-            process.env.MONGODB_URI = '  mongodb+srv://user:pass@host/db  ';
-            assert.equal(getMongoUri(), 'mongodb+srv://user:pass@host/db');
+            process.env.MONGODB_URI = '  mongodb+srv://user:pass@host/db?authSource=custom  ';
+            assert.equal(getMongoUri(), 'mongodb+srv://user:pass@host/db?authSource=custom');
         } finally {
             if (original !== undefined) {
                 process.env.MONGODB_URI = original;
@@ -40,7 +40,7 @@ describe('MongoDB Configuration & Security Suite', () => {
         try {
             delete process.env.MONGODB_URI;
             process.env.DATABASE_URL = 'mongodb+srv://aliasUser:aliasPass@host/aliasDb';
-            assert.equal(getMongoUri(), 'mongodb+srv://aliasUser:aliasPass@host/aliasDb');
+            assert.equal(getMongoUri(), 'mongodb+srv://aliasUser:aliasPass@host/aliasDb?authSource=admin');
         } finally {
             if (origMain !== undefined) process.env.MONGODB_URI = origMain;
             if (origAlias !== undefined) process.env.DATABASE_URL = origAlias;

@@ -32,7 +32,8 @@ if (hostPort) {
 
 /**
  * Retrieve and sanitize MongoDB URI from environment variables.
- * Supports standard aliases and strips accidental enclosing quotes.
+ * Supports standard aliases, strips accidental enclosing quotes,
+ * and ensures authSource=admin for MongoDB Atlas SRV URIs.
  */
 export const getMongoUri = () => {
     const raw = process.env.MONGODB_URI || 
@@ -46,6 +47,13 @@ export const getMongoUri = () => {
     if ((uri.startsWith('"') && uri.endsWith('"')) || (uri.startsWith("'") && uri.endsWith("'"))) {
         uri = uri.slice(1, -1).trim();
     }
+
+    // Ensure authSource=admin is specified for Atlas SRV connections if omitted
+    if (uri.startsWith('mongodb+srv://') && !uri.includes('authSource=')) {
+        const sep = uri.includes('?') ? '&' : '?';
+        uri = `${uri}${sep}authSource=admin`;
+    }
+
     return uri;
 };
 
@@ -92,6 +100,7 @@ if (fs.existsSync(distPath)) {
 // MongoDB connection manager. Share one in-flight connection attempt across
 // startup and incoming API requests so Mongoose queries do not sit in its buffer.
 let dbConnectPromise = null;
+let lastDbError = null;
 
 export const connectToDatabase = async () => {
     if (mongoose.connection.readyState === 1) return;
@@ -100,6 +109,11 @@ export const connectToDatabase = async () => {
     if (!uri) {
         const error = new Error('MONGODB_URI is missing from the runtime environment');
         error.code = 'CONFIG_MISSING';
+        lastDbError = {
+            name: 'ConfigurationError',
+            message: 'MONGODB_URI is missing from runtime environment',
+            timestamp: new Date().toISOString()
+        };
         throw error;
     }
 
@@ -111,10 +125,16 @@ export const connectToDatabase = async () => {
             connectTimeoutMS: 8000,
         })
             .then(() => {
+                lastDbError = null;
                 console.log(`✓ MongoDB Connected Successfully to database: "${mongoose.connection.name}"`);
             })
             .catch((error) => {
                 const message = error?.message || String(error);
+                lastDbError = {
+                    name: error?.name || 'Error',
+                    message,
+                    timestamp: new Date().toISOString()
+                };
                 console.error(`✗ MongoDB Connection Error: ${error?.name || 'Error'}: ${message}`);
                 if (/bad auth|authentication failed/i.test(message)) {
                     console.error('  👉 Action Required: Atlas authentication failed for database user.');
@@ -177,12 +197,24 @@ app.get('/health', (req, res) => {
     const dbStatus = stateMap[dbReadyState] || 'unknown';
     const isHealthy = dbReadyState === 1;
 
+    const uri = getMongoUri();
+    let passLength = null;
+    if (uri) {
+        const passMatch = uri.match(/mongodb(?:\+srv)?:\/\/[^:]+:([^@]+)@/);
+        if (passMatch) {
+            passLength = passMatch[1].length;
+        }
+    }
+
     res.status(isHealthy ? 200 : 503).json({
         status: isHealthy ? 'healthy' : 'degraded',
         database: {
             status: dbStatus,
             name: mongoose.connection.name || null,
-            target: maskMongoUri(getMongoUri())
+            target: maskMongoUri(uri),
+            passwordConfigured: passLength !== null,
+            passwordLength: passLength,
+            lastError: isHealthy ? null : lastDbError
         },
         port: process.env.PORT || 3000,
         timestamp: new Date().toISOString()
