@@ -1,5 +1,5 @@
-// api/index.js - Trigger restart 18
-import 'dotenv/config';
+// api/index.js - Trigger restart 19
+import dotenv from 'dotenv';
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -7,13 +7,17 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables from process.cwd() and api/.env
+dotenv.config();
+dotenv.config({ path: path.join(__dirname, '.env') });
+
 // If your routes are ESM: import normally.
 // If your routes are CommonJS (use require), either convert them or rename to .cjs and import dynamically.
 // Try ESM import first:
 import apiRoutes from './routes/index.cjs';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -30,6 +34,12 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 const uploadsPath = path.join(__dirname, '../uploads');
 if (fs.existsSync(uploadsPath)) {
     app.use('/uploads', express.static(uploadsPath));
+}
+
+// Serve built frontend assets in production
+const distPath = path.join(__dirname, '../dist');
+if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
 }
 
 // Database connection cache (to avoid reconnects on serverless cold starts)
@@ -101,14 +111,23 @@ app.get('/health', async (req, res) => {
     }
 });
 
-// Root endpoint
-app.get('/', (req, res) => {
-    res.json({
-        message: 'My Class Content Browser API',
-        version: '1.0.0',
-        status: 'running'
+// Root endpoint & SPA fallback
+if (fs.existsSync(distPath)) {
+    app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/health')) {
+            return next();
+        }
+        res.sendFile(path.join(distPath, 'index.html'));
     });
-});
+} else {
+    app.get('/', (req, res) => {
+        res.json({
+            message: 'My Class Content Browser API',
+            version: '1.0.0',
+            status: 'running'
+        });
+    });
+}
 
 // Server startup for direct Node.js execution
 export const startServer = async () => {
@@ -116,7 +135,8 @@ export const startServer = async () => {
         await connectToDatabase();
         const PORT = process.env.PORT || 5002;
         const server = app.listen(PORT, '0.0.0.0', () => {
-            console.log(`✓ API Server running on port ${PORT}`);
+            console.log(`✓ Production Server running on port ${PORT}`);
+            console.log(`✓ Web app available at http://localhost:${PORT}`);
             console.log(`✓ Health check available at http://localhost:${PORT}/health`);
             console.log(`✓ API endpoints available at http://localhost:${PORT}/api`);
         });
