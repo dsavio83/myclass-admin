@@ -1,4 +1,4 @@
-// api/index.js - Trigger restart 21
+// api/index.js - Trigger restart 22
 import dotenv from 'dotenv';
 import express from 'express';
 import mongoose from 'mongoose';
@@ -10,14 +10,56 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Preserve any PORT set by Hostinger / host environment before loading .env files
+// Preserve any PORT set by Hostinger / host environment
 const hostPort = process.env.PORT;
-dotenv.config();
-dotenv.config({ path: path.join(__dirname, '.env') });
-dotenv.config({ path: path.join(__dirname, '../.env') });
+
+// Load local .env files only if they exist on disk.
+// Explicit host environment variables always take precedence (override: false).
+const envCandidatePaths = [
+    path.join(process.cwd(), '.env'),
+    path.join(__dirname, '.env'),
+    path.join(__dirname, '../.env')
+];
+for (const envPath of envCandidatePaths) {
+    if (fs.existsSync(envPath)) {
+        dotenv.config({ path: envPath, override: false });
+    }
+}
+
 if (hostPort) {
     process.env.PORT = hostPort;
 }
+
+/**
+ * Retrieve and sanitize MongoDB URI from environment variables.
+ * Supports standard aliases and strips accidental enclosing quotes.
+ */
+export const getMongoUri = () => {
+    const raw = process.env.MONGODB_URI || 
+                process.env.MONGO_URI || 
+                process.env.DATABASE_URL || 
+                process.env.MONGO_URL;
+    if (!raw) return null;
+
+    let uri = raw.trim();
+    // Strip accidental surrounding single or double quotes entered in hosting UI
+    if ((uri.startsWith('"') && uri.endsWith('"')) || (uri.startsWith("'") && uri.endsWith("'"))) {
+        uri = uri.slice(1, -1).trim();
+    }
+    return uri;
+};
+
+/**
+ * Safely mask MongoDB connection string for logs without exposing password.
+ */
+export const maskMongoUri = (uri) => {
+    if (!uri) return 'not-configured';
+    try {
+        return uri.replace(/(mongodb(?:\+srv)?:\/\/[^:]+:)[^@]+(@)/i, '$1****$2');
+    } catch {
+        return 'configured (masked)';
+    }
+};
 
 // If your routes are ESM: import normally.
 // If your routes are CommonJS (use require), either convert them or rename to .cjs and import dynamically.
@@ -51,25 +93,36 @@ if (fs.existsSync(distPath)) {
 // startup and incoming API requests so Mongoose queries do not sit in its buffer.
 let dbConnectPromise = null;
 
-const connectToDatabase = async () => {
+export const connectToDatabase = async () => {
     if (mongoose.connection.readyState === 1) return;
 
-    const uri = process.env.MONGODB_URI?.trim();
+    const uri = getMongoUri();
     if (!uri) {
-        throw new Error('MONGODB_URI is missing from the runtime environment');
+        const error = new Error('MONGODB_URI is missing from the runtime environment');
+        error.code = 'CONFIG_MISSING';
+        throw error;
     }
 
     if (!dbConnectPromise) {
+        const masked = maskMongoUri(uri);
+        console.log(`📡 Connecting to MongoDB target: ${masked}`);
         dbConnectPromise = mongoose.connect(uri, {
-            serverSelectionTimeoutMS: 10000,
-            connectTimeoutMS: 10000,
+            serverSelectionTimeoutMS: 8000,
+            connectTimeoutMS: 8000,
         })
             .then(() => {
-                console.log('✓ MongoDB Connected Successfully');
+                console.log(`✓ MongoDB Connected Successfully to database: "${mongoose.connection.name}"`);
             })
             .catch((error) => {
-                // Do not log the connection string; it may contain credentials.
-                console.error('✗ MongoDB Connection Error:', `${error?.name || 'Error'}: ${error?.message || error}`);
+                const message = error?.message || String(error);
+                console.error(`✗ MongoDB Connection Error: ${error?.name || 'Error'}: ${message}`);
+                if (/bad auth|authentication failed/i.test(message)) {
+                    console.error('  👉 Action Required: Atlas authentication failed for database user.');
+                    console.error('     1. Open MongoDB Atlas -> Database Access -> dsavio83_db_user -> Edit Password.');
+                    console.error('     2. In Hostinger hPanel -> Environment Variables, update MONGODB_URI with the matching password.');
+                } else if (/timed out|whitelist|unreachable/i.test(message)) {
+                    console.error('  👉 Action Required: Atlas cluster unreachable. Check Network Access allows 0.0.0.0/0.');
+                }
                 throw error;
             })
             .finally(() => {
@@ -81,7 +134,7 @@ const connectToDatabase = async () => {
 };
 
 // Gate database-backed API requests on a real connection. This converts the
-// confusing Mongoose buffering timeout into a useful 503 and preserves details
+// confusing Mongoose buffering timeout into a clean, immediate 503 and preserves details
 // in the server logs for diagnosing Atlas credentials/network access.
 app.use('/api', async (req, res, next) => {
     try {
@@ -89,12 +142,22 @@ app.use('/api', async (req, res, next) => {
         next();
     } catch (error) {
         const message = error?.message || String(error);
+        const isAuthError = /bad auth|authentication failed/i.test(message);
+        const isConfigMissing = error.code === 'CONFIG_MISSING' || message.includes('missing');
+
         console.error(`[API DB gate] ${req.method} ${req.originalUrl}: ${error?.name || 'Error'}: ${message}`);
+
+        let userMsg = 'Database is currently unavailable. Please verify connection settings.';
+        if (isConfigMissing) {
+            userMsg = 'Database configuration (MONGODB_URI) is missing in host environment variables.';
+        } else if (isAuthError) {
+            userMsg = 'Database authentication failed. Please update MONGODB_URI credentials in Hostinger.';
+        }
+
         res.status(503).json({
             success: false,
-            message: message.includes('MONGODB_URI is missing')
-                ? 'Database configuration is missing on the server.'
-                : 'Database is unavailable. Check the server runtime logs and MongoDB Atlas connection settings.'
+            error: 'DATABASE_UNAVAILABLE',
+            message: userMsg
         });
     }
 });
@@ -104,10 +167,23 @@ app.use('/api', apiRoutes);
 
 // Health check (instant, does not block on external connections)
 app.get('/health', (req, res) => {
-    const dbState = mongoose.connection.readyState === 1 ? 'connected' : (mongoose.connection.readyState === 2 ? 'connecting' : 'disconnected');
-    res.json({
-        status: dbState === 'connected' ? 'healthy' : 'degraded',
-        database: dbState,
+    const stateMap = {
+        0: 'disconnected',
+        1: 'connected',
+        2: 'connecting',
+        3: 'disconnecting'
+    };
+    const dbReadyState = mongoose.connection.readyState;
+    const dbStatus = stateMap[dbReadyState] || 'unknown';
+    const isHealthy = dbReadyState === 1;
+
+    res.status(isHealthy ? 200 : 503).json({
+        status: isHealthy ? 'healthy' : 'degraded',
+        database: {
+            status: dbStatus,
+            name: mongoose.connection.name || null,
+            target: maskMongoUri(getMongoUri())
+        },
         port: process.env.PORT || 3000,
         timestamp: new Date().toISOString()
     });

@@ -1,19 +1,42 @@
 // Test your MongoDB credentials without starting the server.
-// Run:  node test-db-connection.js          (uses .env)
-//   or: node test-db-connection.js "mongodb+srv://user:pass@host/db"
-import 'dotenv/config';
+// Run:  node api/test-db-connection.js
+//   or: node api/test-db-connection.js "mongodb+srv://user:pass@host/db"
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 
-const uri = process.argv[2] || process.env.MONGODB_URI;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables safely
+const envCandidatePaths = [
+    path.join(process.cwd(), '.env'),
+    path.join(__dirname, '.env'),
+    path.join(__dirname, '../.env')
+];
+for (const envPath of envCandidatePaths) {
+    if (fs.existsSync(envPath)) {
+        dotenv.config({ path: envPath, override: false });
+    }
+}
+
+let uri = process.argv[2] || process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL;
 
 if (!uri) {
-    console.error('No URI found. Add MONGODB_URI to .env or pass one as an argument.');
+    console.error('No URI found. Set MONGODB_URI in your environment or pass one as an argument.');
     process.exit(1);
 }
 
+uri = uri.trim();
+if ((uri.startsWith('"') && uri.endsWith('"')) || (uri.startsWith("'") && uri.endsWith("'"))) {
+    uri = uri.slice(1, -1).trim();
+}
+
 // Show the shape of the URI without leaking the password
-const safe = uri.replace(/\/\/([^:]+):([^@]*)@/, '//$1:****@');
-console.log(`Testing: ${safe}\n`);
+const safe = uri.replace(/(mongodb(?:\+srv)?:\/\/[^:]+:)[^@]+(@)/i, '$1****$2');
+console.log(`Testing MongoDB connection: ${safe}\n`);
 
 try {
     await mongoose.connect(uri, { serverSelectionTimeoutMS: 10000 });

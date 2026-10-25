@@ -7,7 +7,10 @@ const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const nodemailer = require('nodemailer');
 const router = express.Router();
-require('dotenv').config({ path: path.join(__dirname, '../.env') }); // Ensure env vars are loaded
+const envLocalPath = path.join(__dirname, '../.env');
+if (fs.existsSync(envLocalPath)) {
+    require('dotenv').config({ path: envLocalPath, override: false });
+}
 const { User, Class, Subject, Unit, SubUnit, Lesson, Content, Webmaster, Download, DownloadLog, ViewLog } = require('../models.cjs');
 
 // --- View Tracking Endpoints ---
@@ -2939,8 +2942,8 @@ router.post('/export/send-pdf', upload.single('file'), async (req, res) => {
         if (!process.env.BREVO_USER && !process.env.SMTP_USER && !process.env.EMAIL_USER) {
             const p1 = path.join(__dirname, '../.env');
             const p2 = path.join(process.cwd(), 'api/.env');
-            require('dotenv').config({ path: p1 });
-            require('dotenv').config({ path: p2 });
+            if (fs.existsSync(p1)) require('dotenv').config({ path: p1, override: false });
+            if (fs.existsSync(p2)) require('dotenv').config({ path: p2, override: false });
         }
 
         const emailUser = process.env.EMAIL_USER || process.env.SMTP_USER || process.env.BREVO_USER;
