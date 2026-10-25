@@ -43,36 +43,59 @@ if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
 }
 
-// Database connection cache
-let dbConnected = false;
+// MongoDB connection manager. Share one in-flight connection attempt across
+// startup and incoming API requests so Mongoose queries do not sit in its buffer.
+let dbConnectPromise = null;
 
 const connectToDatabase = async () => {
-    if (dbConnected && mongoose.connection.readyState === 1) return;
-    const uri = process.env.MONGODB_URI;
+    if (mongoose.connection.readyState === 1) return;
+
+    const uri = process.env.MONGODB_URI?.trim();
     if (!uri) {
-        console.warn('⚠️ MONGODB_URI is not defined in environment variables');
-        return;
+        throw new Error('MONGODB_URI is missing from the runtime environment');
     }
 
-    try {
-        await mongoose.connect(uri, {
-            serverSelectionTimeoutMS: 8000,
-        });
-        dbConnected = true;
-        console.log('✓ MongoDB Connected Successfully');
-    } catch (error) {
-        dbConnected = false;
-        console.error('✗ MongoDB Connection Error:', error && (error.message || error));
-        const msg = error?.message ?? String(error);
-        if (/bad auth|auth(?:entication)? failed/i.test(msg)) {
-            console.error('  -> MongoDB authentication failed. Verify dsavio83_db_user password in Atlas.');
-        } else if (/whitelist|timed out|ENOTFOUND|ETIMEDOUT/i.test(msg)) {
-            console.error('  -> MongoDB Network/IP Whitelist: Ensure MongoDB Atlas has 0.0.0.0/0 allowed in Network Access.');
-        }
+    if (!dbConnectPromise) {
+        dbConnectPromise = mongoose.connect(uri, {
+            serverSelectionTimeoutMS: 10000,
+            connectTimeoutMS: 10000,
+        })
+            .then(() => {
+                console.log('✓ MongoDB Connected Successfully');
+            })
+            .catch((error) => {
+                // Do not log the connection string; it may contain credentials.
+                console.error('✗ MongoDB Connection Error:', `${error?.name || 'Error'}: ${error?.message || error}`);
+                throw error;
+            })
+            .finally(() => {
+                dbConnectPromise = null;
+            });
     }
+
+    await dbConnectPromise;
 };
 
-// Mount routes (ensure apiRoutes is ESM default or change accordingly)
+// Gate database-backed API requests on a real connection. This converts the
+// confusing Mongoose buffering timeout into a useful 503 and preserves details
+// in the server logs for diagnosing Atlas credentials/network access.
+app.use('/api', async (req, res, next) => {
+    try {
+        await connectToDatabase();
+        next();
+    } catch (error) {
+        const message = error?.message || String(error);
+        console.error(`[API DB gate] ${req.method} ${req.originalUrl}: ${error?.name || 'Error'}: ${message}`);
+        res.status(503).json({
+            success: false,
+            message: message.includes('MONGODB_URI is missing')
+                ? 'Database configuration is missing on the server.'
+                : 'Database is unavailable. Check the server runtime logs and MongoDB Atlas connection settings.'
+        });
+    }
+});
+
+// Mount routes only after the database gate middleware.
 app.use('/api', apiRoutes);
 
 // Health check (instant, does not block on external connections)
@@ -164,4 +187,3 @@ if (process.argv[1] === currentFile) {
 export default serverlessHandler;
 export { app, serverlessHandler };
 // Trigger restart 13
-

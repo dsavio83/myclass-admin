@@ -1359,14 +1359,13 @@ router.delete('/files/:filename', (req, res) => {
 router.post('/auth/login', async (req, res) => {
     try {
         const { username, password } = req.body;
-        console.log('Login attempt:', { username, password }); // DEBUG LOG
+        console.log('Login attempt:', { username });
 
         // In a real app, use bcrypt to compare hashed passwords
         const user = await User.findOne({ username });
-        console.log('User found:', user); // DEBUG LOG
+        console.log('User lookup completed:', Boolean(user));
 
         if (!user || user.password !== password) { // Simple comparison for now as per mock
-            console.log('Password mismatch:', { expected: user?.password, received: password }); // DEBUG LOG
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
@@ -1382,13 +1381,12 @@ router.post('/auth/login', async (req, res) => {
 router.post('/auth/webmaster-login', async (req, res) => {
     try {
         const { username, password } = req.body;
-        console.log('Webmaster login attempt:', { username, password });
+        console.log('Webmaster login attempt:', { username });
 
         const webmaster = await Webmaster.findOne({ username });
-        console.log('Webmaster found:', webmaster);
+        console.log('Webmaster lookup completed:', Boolean(webmaster));
 
         if (!webmaster || !bcrypt.compareSync(password, webmaster.password)) {
-            console.log('Webmaster password mismatch:', { expected: webmaster?.password ? 'hashed' : 'none', received: password });
             return res.status(401).json({ message: 'Invalid webmaster credentials' });
         }
 
