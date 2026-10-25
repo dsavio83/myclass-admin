@@ -123,6 +123,10 @@ export const startServer = async () => {
                 console.log(`✓ Production Server listening on socket: ${port}`);
             });
 
+        server.on('error', (err) => {
+            console.error('Server HTTP listen error:', err && (err.message || err));
+        });
+
         // Increase timeout to 5 minutes for large uploads
         server.setTimeout(5 * 60 * 1000);
 
