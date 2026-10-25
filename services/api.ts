@@ -4,20 +4,33 @@ const API_BASE = ((import.meta as any).env && (import.meta as any).env.VITE_API_
 
 // Helper for fetch requests
 const apiRequest = async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-        headers: {
-            'Content-Type': 'application/json',
-            // Add Authorization header here if token exists in localStorage/Context
-        },
-        ...options,
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `API Error: ${response.statusText}`);
+    try {
+        const response = await fetch(`${API_BASE}${endpoint}`, {
+            headers: {
+                'Content-Type': 'application/json',
+                // Add Authorization header here if token exists in localStorage/Context
+            },
+            signal: options?.signal || controller.signal,
+            ...options,
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || `API Error: ${response.statusText}`);
+        }
+
+        return response.json();
+    } catch (error: any) {
+        if (error.name === 'AbortError') {
+            throw new Error('சர்வர் பதிலளிக்கவில்லை (Request timed out). Backend சேவையகம் இயங்குகிறதா என சரிபார்க்கவும்.');
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeoutId);
     }
-
-    return response.json();
 };
 
 export const uploadFile = async (formData: FormData): Promise<any> => {

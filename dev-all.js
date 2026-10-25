@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -8,6 +8,31 @@ const __dirname = dirname(__filename);
 let frontend = null;
 let backend = null;
 let isRestarting = false;
+
+/**
+ * Free port if it is in use by another process
+ */
+function freePort(port) {
+    try {
+        if (process.platform === 'win32') {
+            const output = execSync(`netstat -ano | findstr :${port} | findstr LISTENING`, { 
+                encoding: 'utf-8', 
+                stdio: ['pipe', 'pipe', 'ignore'] 
+            });
+            const lines = output.trim().split('\n');
+            for (const line of lines) {
+                const parts = line.trim().split(/\s+/);
+                const pid = parts[parts.length - 1];
+                if (pid && !isNaN(pid) && parseInt(pid) > 0 && parseInt(pid) !== process.pid) {
+                    try {
+                        execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' });
+                        console.log(`\x1b[33mFreed port ${port} (terminated PID ${pid})\x1b[0m`);
+                    } catch (_) {}
+                }
+            }
+        }
+    } catch (_) {}
+}
 
 /**
  * Starts both frontend and backend servers.
@@ -21,6 +46,10 @@ function startServers() {
     console.log('\x1b[36m%s\x1b[0m', '==============================================');
     console.log('\x1b[90m%s\x1b[0m', `Started at: ${new Date().toLocaleTimeString()}`);
     console.log('');
+
+    // Ensure ports are free before starting
+    freePort(3001);
+    freePort(5001);
 
     // Start Frontend (Vite)
     console.log('\x1b[32m%s\x1b[0m', '📦 Starting Frontend...');
@@ -69,13 +98,13 @@ function restartAll() {
     console.log('\x1b[33m%s\x1b[0m', '\n🔄 RESTARTING ALL SERVICES...');
     console.log('\x1b[90m%s\x1b[0m', 'Stopping processes and cleaning up...');
 
-    // Kill processes
-    // On Windows, sometimes we need to be more aggressive, but .kill() usually works for shell: true if handled right.
     if (frontend) frontend.kill('SIGTERM');
     if (backend) backend.kill('SIGTERM');
 
     // Give it a moment to breathe before restarting
     setTimeout(() => {
+        freePort(3001);
+        freePort(5001);
         startServers();
     }, 3000);
 }

@@ -968,64 +968,31 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user, category }) => {
                 onProgress: (msg) => setSweetAlert(prev => ({ ...prev, message: msg + '\n\nPlease wait...' }))
             });
 
-            // 4. Handle PDF distribution
-            if (isAdmin) {
-                // ADMIN: Direct download
-                const url = URL.createObjectURL(pdfBlob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `${lessonName.replace(/[^a-zA-Z0-9\u0B80-\u0BFF]/g, '_')}_QA_${new Date().toISOString().slice(0, 10)}.pdf`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+            // 4. Handle Direct PDF Download for ALL users (No email needed)
+            const url = URL.createObjectURL(pdfBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${lessonName.replace(/[^a-zA-Z0-9\u0B80-\u0BFF]/g, '_')}_QA_${new Date().toISOString().slice(0, 10)}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
 
-                // Update download count (Optional)
-                try {
-                    await api.incrementLessonDownload(lessonId, 'qa');
-                } catch (e) {
-                    console.error("Failed to increment download count", e);
-                }
-
-                setSweetAlert({
-                    show: true,
-                    type: 'success',
-                    title: 'வெற்றி! | Success!',
-                    message: 'கோப்பு பதிவிறக்கம் தொடங்கியது!\n\nDownload started successfully!'
-                });
-            } else {
-                setSweetAlert({
-                    show: true,
-                    type: 'loading',
-                    title: 'மின்னஞ்சல் அனுப்பப்படுகிறது | Sending Email',
-                    message: 'PDF மின்னஞ்சலுக்கு அனுப்பப்படுகிறது...\n\nSending PDF to email...'
-                });
-
-                const formData = new FormData();
-                formData.append('file', pdfBlob, `${lessonName}_QA.pdf`);
-                formData.append('email', email);
-                formData.append('title', `Q&A: ${lessonName}`);
-                formData.append('lessonId', lessonId);
-                formData.append('type', 'qa');
-                formData.append('userName', user.name || 'User');
-
-                const res = await fetch('/api/export/send-pdf', {
-                    method: 'POST',
-                    body: formData,
-                });
-
-                const responseData = await res.json();
-                if (res.ok && responseData.success) {
-                    setSweetAlert({
-                        show: true,
-                        type: 'success',
-                        title: 'வெற்றி! | Success!',
-                        message: `PDF உங்கள் மின்னஞ்சலுக்கு அனுப்பப்பட்டது!\n📧 ${email}\n\nSuccess!`
-                    });
-                } else {
-                    throw new Error(responseData.message || 'Error sending email');
-                }
+            // Update download count (Optional)
+            try {
+                await api.incrementLessonDownload(lessonId, 'qa');
+            } catch (e) {
+                console.error("Failed to increment download count", e);
             }
+
+            setSweetAlert({
+                show: true,
+                type: 'success',
+                title: 'வெற்றி! | Success!',
+                message: 'கோப்பு பதிவிறக்கம் தொடங்கியது!\n\nDownload started successfully!'
+            });
+            setTimeout(() => setSweetAlert(prev => ({ ...prev, show: false })), 2500);
+
             setExportModalOpen(false);
         } catch (error: any) {
             console.error('Export Error:', error);
@@ -1033,10 +1000,8 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user, category }) => {
             setSweetAlert({
                 show: true,
                 type: 'error',
-                title: user.role === 'admin' || user.canEdit ? 'பிழை | Error' : 'மின்னஞ்சல் தோல்வி | Email Failed',
-                message: (user.role === 'admin' || user.canEdit)
-                    ? `Export தோல்வியடைந்தது: ${error.message}\n\nதொடர்புக்கு: ${adminPhone}`
-                    : `PDF மின்னஞ்சலுக்கு அனுப்ப முடியவில்லை.\n(${error.message})\n\nதயவு செய்து நிர்வாகியை தொடர்பு கொள்ளவும்:\n📞 ${adminPhone}`,
+                title: 'பிழை | Error',
+                message: `Export தோல்வியடைந்தது: ${error.message}\n\nதொடர்புக்கு:\n📞 ${adminPhone}`,
                 phone: adminPhone
             });
         } finally {
@@ -1046,15 +1011,7 @@ export const QAView: React.FC<QAViewProps> = ({ lessonId, user, category }) => {
     };
 
     const handleExportInitiate = () => {
-        if (canEdit) {
-            handleExportConfirm(user.email || 'admin@example.com');
-        } else {
-            if (user.email) {
-                handleExportConfirm(user.email);
-            } else {
-                setExportModalOpen(true);
-            }
-        }
+        handleExportConfirm(user?.email || '');
     };
 
     return (

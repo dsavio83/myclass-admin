@@ -4,9 +4,8 @@ import { useApi } from '../../hooks/useApi';
 import * as api from '../../services/api';
 import { trackView } from '../../services/api';
 import { QuizIcon } from '../icons/ResourceTypeIcons';
-import { ChevronRightIcon, EyeIcon, CheckCircleIcon, DownloadIcon, XIcon, LinkIcon, PlusIcon } from '../icons/AdminIcons';
+import { ChevronRightIcon, EyeIcon, CheckCircleIcon, DownloadIcon, XIcon, LinkIcon } from '../icons/AdminIcons';
 import { StandardContentPicker } from '../common/StandardContentPicker';
-import { QuizConfiguration } from '../QuizConfiguration';
 import { PublishToggle } from '../common/PublishToggle';
 import { ContentStatusBanner } from '../common/ContentStatusBanner';
 import { useToast } from '../../context/ToastContext';
@@ -20,6 +19,15 @@ interface QuizViewProps {
     user: User;
     category?: string;
 }
+
+const compactPdfRichText = (content: string): string =>
+    processContentForHTML(content).replace(/<p\b([^>]*)>/gi, (tag, attributes: string) => {
+        const styleMatch = attributes.match(/\sstyle=(['"])(.*?)\1/i);
+        if (!styleMatch) return `<p${attributes} style="display:inline;margin:0;">`;
+
+        const updatedAttributes = attributes.replace(styleMatch[0], ` style="${styleMatch[2]};display:inline;margin:0;"`);
+        return `<p${updatedAttributes}>`;
+    });
 
 // --- Components for the Result Screen ---
 
@@ -297,28 +305,6 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
     const [isExporting, setIsExporting] = useState(false);
     const exportContainerRef = useRef<HTMLDivElement>(null);
     const [pickerOpen, setPickerOpen] = useState(false);
-    const [isCreating, setIsCreating] = useState(false);
-    const [isQuizConfigOpen, setIsQuizConfigOpen] = useState(false); // Helper if needed, but QuizConfig is separate usually. Wait, QuizView renders the list to PLAY. Adding is usually done via a separate tab or Config.
-    // The previous implementation used QuizConfiguration component separate from QuizView.
-    // However, the requested flow is to add/link from THIS page if we are in admin mode.
-    // Standard 'standard' QuizView typically only lists quizzes.
-    // But in D+ context, we want to Link.
-
-    // Note: QuizView.tsx is for TAKING quizzes usually. QuizConfiguration is for EDITING/ADDING.
-    // BUT the user interaction implies we are seeing this "Below Average" page which uses ContentDisplay -> QuizView.
-    // And users want to "Add New" here.
-    // The previous summary mentioned QuizConfiguration was updated.
-    // Let's check how "Add New" is normally surfaced. 
-    // Usually it's in QuizConfiguration.tsx. But here we are in QuizView.tsx.
-    // If QuizView is just for display, where is the "Add" button?
-    // In other views (Video, Audio), the Add button IS in the View.
-    // In QuizView, it seems there is NO "Add" button in the standard view, only Select.
-    // The "Add" functionality for Quizzes is usually in a separate "Quiz Configuration" tab/page.
-    // HOWEVER, for "Below Average" page, we want everything in one place?
-    // The BelowAveragePage uses ContentDisplay which renders QuizView.
-    // So if I want to "Link" a quiz, I should probably add the button here in QuizView when in List mode.
-
-
     // SweetAlert state
     const [sweetAlert, setSweetAlert] = useState<{
         show: boolean;
@@ -492,39 +478,46 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
                     quizQuestions = JSON.parse(quiz.body.replace(/&quot;/g, '"'));
                 } catch (e) { return; }
 
-                allContentHTML += `<h2 style="margin-top: 30px; font-size: 18pt; color: #b91c1c; border-bottom: 2px solid #b91c1c; padding-bottom: 5px;">Quiz ${quizIndex + 1}: ${quiz.title}</h2>`;
+                allContentHTML += `<h2 style="margin: 0 0 7px; padding: 0; border: 0; font-size: 14pt; line-height: 1.2; color: #b91c1c;">Quiz ${quizIndex + 1}: ${quiz.title}</h2>`;
 
                 quizQuestions.forEach((q, qIndex) => {
+                    const correctOption = q.answerOptions.find(option => option.isCorrect);
+                    const explanation = correctOption?.rationale?.trim();
                     let optionsHTML = '';
-                    q.answerOptions.forEach((opt, optIndex) => {
+
+                    q.answerOptions.forEach((opt) => {
                         const isCorrect = opt.isCorrect;
                         const colorStyle = isCorrect ? 'color: #15803d; font-weight: bold;' : 'color: #374151;';
-                        const icon = isCorrect ? '✅' : '○';
+                        const marker = isCorrect ? '✓' : '○';
 
                         optionsHTML += `
-                            <div style="margin-bottom: 5px; ${colorStyle} page-break-inside: avoid;">
-                                <span style="display: inline-block; width: 25px;">${icon}</span>
-                                ${processContentForHTML(opt.text)}
+                            <div class="quiz-option-row" style="display: flex; align-items: flex-start; gap: 6px; margin-bottom: 4px; ${colorStyle} page-break-inside: avoid;">
+                                <span style="display: inline-block; flex: 0 0 22px; width: 22px; text-align: right; font-weight: bold;">${marker}</span>
+                                <div class="quiz-option-content" style="flex: 1; min-width: 0;">${compactPdfRichText(opt.text)}</div>
                             </div>
                         `;
                     });
 
-                    allContentHTML += `
-                        <div class="question-container" style="page-break-inside: avoid; margin-bottom: 20px; border-bottom: 1px dashed #eee; padding-bottom: 15px;">
-                            <div style="font-weight: bold; font-size: 14pt; margin-bottom: 10px; color: #111;">
-                                <span style="color: #b91c1c; margin-right: 5px;">Q${qIndex + 1}.</span>
-                                ${processContentForHTML(q.question)}
-                            </div>
-                            <div style="margin-left: 15px; font-size: 12pt;">
-                                ${optionsHTML}
-                            </div>
-                            ${q.answerOptions.find(o => o.isCorrect)?.rationale ? `
-                                <div style="margin-top: 8px; font-size: 11pt; color: #555; font-style: italic; background: #f9f9f9; padding: 5px; border-left: 3px solid #ddd;">
-                                    <strong>Explanation:</strong> ${processContentForHTML(q.answerOptions.find(o => o.isCorrect)?.rationale || '')}
-                                </div>
-                            ` : ''}
+                    const columnWidth = explanation ? 'calc(50% - 6px)' : '100%';
+                    const explanationHTML = explanation ? `
+                        <div class="quiz-explanation" style="flex: 0 0 calc(50% - 6px); width: calc(50% - 6px); min-width: 0; font-size: 11pt; color: #555; background: #f9f9f9; padding: 7px 9px; border-left: 3px solid #cbd5e1; box-sizing: border-box; page-break-inside: avoid;">
+                            <strong style="font-style: normal; color: #374151;">Explanation:</strong>
+                            <div class="quiz-explanation-content" style="display: inline;">${compactPdfRichText(explanation)}</div>
                         </div>
-                     `;
+                    ` : '';
+
+                    allContentHTML += `
+                        <div class="question-container" style="page-break-inside: avoid; break-inside: avoid; margin-bottom: 6px; padding-bottom: 2px;">
+                            <div class="quiz-question-row" style="display: flex; align-items: flex-start; gap: 7px; margin-bottom: 5px; color: #111; font-weight: bold; font-size: 13pt; line-height: 1.3; text-align: left;">
+                                <span style="flex: 0 0 34px; width: 34px; color: #b91c1c;">Q${qIndex + 1}.</span>
+                                <div class="quiz-question-text" style="flex: 1; min-width: 0;">${compactPdfRichText(q.question)}</div>
+                            </div>
+                            <div class="quiz-answer-columns" style="display: flex; align-items: flex-start; gap: 12px; margin-left: 41px; font-size: 11.5pt; line-height: 1.35; text-align: left;">
+                                <div class="quiz-options" style="flex: 0 0 ${columnWidth}; width: ${columnWidth}; min-width: 0;">${optionsHTML}</div>
+                                ${explanationHTML}
+                            </div>
+                        </div>
+                    `;
                 });
             });
 
@@ -544,62 +537,26 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
                 onProgress: (msg) => setSweetAlert(prev => ({ ...prev, message: msg + '\n\nPlease wait...' }))
             });
 
-            if (isAdmin) {
-                const url = URL.createObjectURL(pdfBlob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `${lessonName.replace(/[^a-zA-Z0-9\u0B80-\u0BFF]/g, '_')}_Quiz_${new Date().toISOString().slice(0, 10)}.pdf`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+            // Direct PDF Download for ALL users
+            const url = URL.createObjectURL(pdfBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${lessonName.replace(/[^a-zA-Z0-9\u0B80-\u0BFF]/g, '_')}_Quiz_${new Date().toISOString().slice(0, 10)}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
 
-                api.incrementLessonDownload(lessonId, 'quiz').catch(console.error);
-                setViewStats(prev => prev ? { ...prev, downloads: prev.downloads + 1 } : { count: 0, downloads: 1 });
+            api.incrementLessonDownload(lessonId, 'quiz').catch(console.error);
+            setViewStats(prev => prev ? { ...prev, downloads: prev.downloads + 1 } : { count: 0, downloads: 1 });
 
-                setSweetAlert({
-                    show: true,
-                    type: 'success',
-                    title: 'வெற்றி! | Success!',
-                    message: 'கோப்பு பதிவிறக்கம் தொடங்கியது!\n\nDownload started successfully!'
-                });
-            } else {
-                setSweetAlert({
-                    show: true,
-                    type: 'loading',
-                    title: 'மின்னஞ்சல் அனுப்பப்படுகிறது | Sending Email',
-                    message: 'PDF மின்னஞ்சலுக்கு அனுப்பப்படுகிறது...\n\nSending PDF to email...'
-                });
-
-                const formData = new FormData();
-                formData.append('file', pdfBlob, `${lessonName}_Quiz.pdf`);
-                formData.append('email', email);
-                formData.append('title', `Quiz: ${lessonName}`);
-                formData.append('lessonId', lessonId);
-                formData.append('type', 'quiz');
-                formData.append('userName', user.name || 'User');
-
-                const res = await fetch('/api/export/send-pdf', {
-                    method: 'POST',
-                    body: formData,
-                });
-
-                const responseData = await res.json();
-
-                if (res.ok && responseData.success) {
-                    api.incrementLessonDownload(lessonId, 'quiz').catch(console.error);
-                    setViewStats(prev => prev ? { ...prev, downloads: prev.downloads + 1 } : { count: 0, downloads: 1 });
-
-                    setSweetAlert({
-                        show: true,
-                        type: 'success',
-                        title: 'வெற்றி! | Success!',
-                        message: `PDF உங்கள் மின்னஞ்சலுக்கு அனுப்பப்பட்டது!\n📧 ${email}\n\nSuccess!`
-                    });
-                } else {
-                    throw new Error(responseData.message || 'Error sending email');
-                }
-            }
+            setSweetAlert({
+                show: true,
+                type: 'success',
+                title: 'வெற்றி! | Success!',
+                message: 'கோப்பு பதிவிறக்கம் தொடங்கியது!\n\nDownload started successfully!'
+            });
+            setTimeout(() => setSweetAlert(prev => ({ ...prev, show: false })), 2500);
             setExportModalOpen(false);
 
         } catch (error: any) {
@@ -621,15 +578,7 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
     };
 
     const handleExportInitiate = () => {
-        if (canEdit) {
-            handleExportConfirm(user.email || 'admin@example.com');
-        } else {
-            if (user.email) {
-                handleExportConfirm(user.email);
-            } else {
-                setExportModalOpen(true);
-            }
-        }
+        handleExportConfirm(user?.email || '');
     };
 
 
@@ -646,21 +595,6 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
     }, [userAnswers, questions]);
 
     if (isLoading) return <div className="text-center p-8 text-gray-500">Loading Quiz...</div>;
-
-    if (isCreating) {
-        return (
-            <QuizConfiguration
-                lessonIdProp={lessonId}
-                categoryProp={category}
-                embedded={true}
-                onBack={() => {
-                    setIsCreating(false);
-                    setVersion(v => v + 1);
-                    triggerContentUpdate();
-                }}
-            />
-        );
-    }
 
     if (quizzes.length === 0) {
         return (
@@ -681,14 +615,6 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
                             >
                                 <LinkIcon className="w-5 h-5" />
                                 <span className="hidden sm:inline">Link Existing</span>
-                            </button>
-                            <button
-                                onClick={() => setIsCreating(true)}
-                                className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-                                title="Create New Quiz"
-                            >
-                                <PlusIcon className="w-5 h-5" />
-                                <span className="hidden sm:inline">Create New</span>
                             </button>
                         </div>
                     )}
@@ -904,21 +830,11 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
                         </div>
                     </div>
                     <div className="flex gap-2 items-center">
-                        {!isLoading && quizzes.length > 0 && (
-                            <button onClick={handleExportInitiate} className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm" title="Export all Quizzes to PDF">
-                                <DownloadIcon className="w-5 h-5" />
-                                <span className="hidden sm:inline">PDF</span>
-                            </button>
-                        )}
                         {canEdit && category === 'below_average_d_plus' && (
                             <>
                                 <button onClick={() => setPickerOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shadow-sm">
                                     <LinkIcon className="w-5 h-5" />
                                     <span className="hidden sm:inline">Link</span>
-                                </button>
-                                <button onClick={() => setIsCreating(true)} className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
-                                    <PlusIcon className="w-5 h-5" />
-                                    <span className="hidden sm:inline">Create</span>
                                 </button>
                             </>
                         )}
@@ -929,11 +845,10 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
                     <div className="text-center py-32 bg-white dark:bg-gray-800 rounded-3xl shadow-sm border border-dashed border-gray-200 dark:border-gray-700">
                         <QuizIcon className="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
                         <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">No quizzes yet</h3>
-                        <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto mb-6">Create a new quiz or link an existing one.</p>
+                        <p className="text-gray-500 dark:text-gray-400 max-w-sm mx-auto mb-6">No quizzes are available yet. Add quizzes from Quiz Configuration in the Admin Panel.</p>
                         {canEdit && category === 'below_average_d_plus' && (
                             <div className="flex gap-3 justify-center">
                                 <button onClick={() => setPickerOpen(true)} className="px-4 py-2 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded-lg text-sm font-medium transition-colors">Link Existing</button>
-                                <button onClick={() => setIsCreating(true)} className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors border border-transparent shadow-sm">Create New</button>
                             </div>
                         )}
                     </div>
@@ -1020,13 +935,6 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
                                     <LinkIcon className="w-4 h-4" />
                                     <span>Link</span>
                                 </button>
-                                <button
-                                    onClick={() => setIsCreating(true)}
-                                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium"
-                                >
-                                    <PlusIcon className="w-4 h-4" />
-                                    <span>Create</span>
-                                </button>
                             </>
                         )}
                     </div>
@@ -1066,23 +974,15 @@ export const QuizView: React.FC<QuizViewProps> = ({ lessonId, user, category }) 
                             <QuizIcon className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
                             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Quizzes Available</h3>
                             <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">
-                                Get started by creating a new quiz or linking an existing one.
+                                Quizzes will appear here after they are added in Quiz Configuration.
                             </p>
                             {canEdit && category === 'below_average_d_plus' && (
-                                <div className="flex gap-3 justify-center">
-                                    <button
-                                        onClick={() => setPickerOpen(true)}
-                                        className="px-4 py-2 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded-lg text-sm font-medium transition-colors"
-                                    >
-                                        Link Existing
-                                    </button>
-                                    <button
-                                        onClick={() => setIsCreating(true)}
-                                        className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors border border-transparent shadow-sm"
-                                    >
-                                        Create New
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={() => setPickerOpen(true)}
+                                    className="px-4 py-2 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded-lg text-sm font-medium transition-colors"
+                                >
+                                    Link Existing
+                                </button>
                             )}
                         </div>
                     </div>

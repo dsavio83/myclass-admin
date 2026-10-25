@@ -187,8 +187,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ url, initialScale = 1.0 })
                     setError('Failed to load PDF. Invalid PDF format.');
                 } else if (err.name === 'PasswordException') {
                     setError('Failed to load PDF. Password protected files are not supported.');
-                } else if (err.name === 'MissingPDFException') {
-                    setError('Failed to load PDF. File not found or corrupted.');
+                } else if (err.name === 'MissingPDFException' || err.name === 'ResponseException' || (err.message && err.message.includes('404'))) {
+                    setError('கோப்பு கிளவுடில் காணப்படவில்லை (File not found / 404). தயவுசெய்து இந்தக் கோப்பை மீண்டும் பதிவேற்றவும் (Please re-upload).');
                 } else if (err.name === 'UnexpectedResponseException') {
                     setError('Failed to load PDF. Network error occurred.');
                 } else if (err.message && (err.message.includes('Worker was destroyed') || err.message.includes('Worker'))) {

@@ -42,6 +42,22 @@ export class PdfExportHelper {
 
     private static splitContentIntoPages(htmlContent: string): string[] {
         const pages: string[] = [];
+        const measurementStyles = document.createElement('style');
+        measurementStyles.textContent = `
+            .pdf-measure-content { font-size: 13pt; line-height: 1.5; text-align: justify; }
+            .pdf-measure-content p { display: block; margin: 0 0 10px; }
+            .pdf-measure-content h1 { font-size: 20pt; line-height: 1.2; margin: 10px 0; }
+            .pdf-measure-content h2 { font-size: 18pt; line-height: 1.2; margin: 10px 0 8px; }
+            .pdf-measure-content h3 { font-size: 16pt; line-height: 1.2; margin: 10px 0 8px; }
+            .pdf-measure-content h4, .pdf-measure-content h5, .pdf-measure-content h6 { font-size: 14pt; margin: 8px 0 5px; }
+            .pdf-measure-content ul { margin: 5px 0 10px 25px; padding: 0; }
+            .pdf-measure-content ol { margin: 5px 0 10px 25px; padding: 0; }
+            .pdf-measure-content li { margin-bottom: 4px; padding-left: 5px; }
+            .pdf-measure-content blockquote { margin: 10px 0; padding-left: 15px; }
+            .pdf-measure-content img { max-width: 100%; height: auto; display: block; margin: 5px auto; }
+        `;
+        document.head.appendChild(measurementStyles);
+
         const contentContainer = document.createElement('div');
         contentContainer.innerHTML = htmlContent;
 
@@ -106,6 +122,12 @@ export class PdfExportHelper {
             flushBuffer();
         }
 
+        // Ignore empty editor paragraphs and whitespace-only trailing blocks.
+        blockElements = blockElements.filter(element => {
+            const text = (element.textContent || '').replace(/[\s\u00a0\u200b\ufeff]/g, '');
+            return text.length > 0 || !!element.querySelector('img, table, svg, canvas, iframe, video, audio, mjx-container');
+        });
+
         const tempDiv = document.createElement('div');
         tempDiv.style.cssText = `
             position: absolute;
@@ -114,19 +136,20 @@ export class PdfExportHelper {
             top: -9999px;
             width: 714px; /* Exact content inner width (794px - 40px - 40px) */
             font-family: 'TAU-Paalai', 'TAU-Marutham Bold','TAU-Kabilar', 'Nirmala UI', Arial, sans-serif;
-            font-size: 14pt;
-            line-height: 1.6;
+            font-size: 13pt;
+            line-height: 1.5;
             padding: 0;
             margin: 0;
             word-wrap: break-word;
         `;
+        tempDiv.className = 'pdf-measure-content';
         document.body.appendChild(tempDiv);
 
         // A4 Height: 1123px
         // Header ~70px, Footer ~50px
         // Margins: Top 85px, Bottom 50px -> Avail: ~988px
-        const maxHeightPerPage = 985;
-        const headingThreshold = 100;
+        const maxHeightPerPage = 1000;
+        const headingThreshold = 45;
 
         let currentPageHTML = '';
         let currentHeight = 0;
@@ -140,20 +163,40 @@ export class PdfExportHelper {
             let elementHeight = tempDiv.offsetHeight;
             if (elementHeight === 0 && element.textContent?.trim()) elementHeight = 24;
 
-            // 1. Heading Logic
+            // 1. Keep a quiz heading with its first question when possible.
             if (this.isHeading(element)) {
-                const spaceLeft = maxHeightPerPage - currentHeight;
-                if (spaceLeft < headingThreshold && currentPageHTML !== '') {
+                let keepWithHeadingHeight = headingThreshold;
+                const nextElement = blockElements[i + 1];
+                if (nextElement?.classList.contains('question-container')) {
+                    tempDiv.innerHTML = '';
+                    tempDiv.appendChild(nextElement.cloneNode(true));
+                    keepWithHeadingHeight = Math.min(maxHeightPerPage, elementHeight + tempDiv.offsetHeight + 10);
+                    tempDiv.innerHTML = '';
+                    tempDiv.appendChild(element.cloneNode(true));
+                }
+
+                const headingSpaceLeft = maxHeightPerPage - currentHeight;
+                if (headingSpaceLeft < keepWithHeadingHeight && currentPageHTML !== '') {
                     pages.push(currentPageHTML);
                     currentPageHTML = '';
                     currentHeight = 0;
                 }
             }
 
-            // 2. Fit Check
-            const spaceLeft = maxHeightPerPage - currentHeight;
+            // 2. Keep each question with its options and explanation on one page.
+            let spaceLeft = maxHeightPerPage - currentHeight;
+            const isQuestionContainer = element.classList.contains('question-container');
+            if (isQuestionContainer && elementHeight > spaceLeft && currentPageHTML !== '') {
+                pages.push(currentPageHTML);
+                currentPageHTML = '';
+                currentHeight = 0;
+                spaceLeft = maxHeightPerPage;
+            }
 
-            if (elementHeight <= spaceLeft) {
+            if (isQuestionContainer && elementHeight <= maxHeightPerPage) {
+                currentPageHTML += element.outerHTML;
+                currentHeight += elementHeight;
+            } else if (elementHeight <= spaceLeft) {
                 // FITS perfectly
                 currentPageHTML += element.outerHTML;
                 currentHeight += elementHeight;
@@ -240,18 +283,36 @@ export class PdfExportHelper {
                         }
                     }
 
-                    if (part1Content.childNodes.length > 0) {
+                    let paragraphMovedToNextPage = false;
+                    if (element.tagName === 'P' && part2Content.childNodes.length > 0 && elementHeight <= maxHeightPerPage) {
+                        tempDiv.innerHTML = '';
+                        tempDiv.appendChild(part1Content.cloneNode(true));
+                        const firstFragmentHeight = tempDiv.offsetHeight;
+                        const lineHeight = Number.parseFloat(getComputedStyle(tempDiv).lineHeight) || 26;
+                        const minimumParagraphStartHeight = lineHeight * 1.5;
+
+                        if (firstFragmentHeight > 0 && firstFragmentHeight < minimumParagraphStartHeight) {
+                            if (currentPageHTML !== '') pages.push(currentPageHTML);
+                            currentPageHTML = element.outerHTML;
+                            currentHeight = elementHeight;
+                            part1Content.replaceChildren();
+                            part2Content.replaceChildren();
+                            paragraphMovedToNextPage = true;
+                        }
+                    }
+
+                    if (!paragraphMovedToNextPage && part1Content.childNodes.length > 0) {
                         currentPageHTML += part1Content.outerHTML;
                         pages.push(currentPageHTML);
                         currentPageHTML = '';
                         currentHeight = 0;
-                    } else {
-                        pages.push(currentPageHTML);
+                    } else if (!paragraphMovedToNextPage) {
+                        if (currentPageHTML !== '') pages.push(currentPageHTML);
                         currentPageHTML = '';
                         currentHeight = 0;
                     }
 
-                    if (part2Content.childNodes.length > 0) {
+                    if (!paragraphMovedToNextPage && part2Content.childNodes.length > 0) {
                         // Add Part 2 to new page
                         currentPageHTML += part2Content.outerHTML;
 
@@ -275,7 +336,7 @@ export class PdfExportHelper {
 
             // Spacing
             if (i < blockElements.length - 1 && currentHeight > 0) {
-                const spacing = 10;
+                const spacing = element.classList.contains('question-container') ? 4 : 10;
                 if (currentHeight + spacing <= maxHeightPerPage) {
                     currentHeight += spacing;
                 }
@@ -287,11 +348,22 @@ export class PdfExportHelper {
         }
 
         document.body.removeChild(tempDiv);
-        if (pages.length === 0) {
-            pages.push('<div style="text-align: center; padding: 100px; color: #666; font-style: italic;">No content available.</div>');
+        document.head.removeChild(measurementStyles);
+
+        // A final safety filter prevents blank trailing pages from empty paragraphs,
+        // whitespace-only editor nodes, or empty page fragments.
+        const nonEmptyPages = pages.filter(pageHTML => {
+            const pageContent = document.createElement('div');
+            pageContent.innerHTML = pageHTML;
+            const text = (pageContent.textContent || '').replace(/[\s\u00a0\u200b\ufeff]/g, '');
+            return text.length > 0 || !!pageContent.querySelector('img, table, svg, canvas, iframe, video, audio, mjx-container');
+        });
+
+        if (nonEmptyPages.length === 0) {
+            nonEmptyPages.push('<div style="text-align: center; padding: 100px; color: #666; font-style: italic;">No content available.</div>');
         }
 
-        return pages;
+        return nonEmptyPages;
     }
 
     public static async generateAndExport(

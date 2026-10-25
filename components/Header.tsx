@@ -13,6 +13,8 @@ interface HeaderProps {
   selectedClass?: string;
   onClassSelect?: () => void;
   onProfile?: () => void;
+  onBack?: () => void;
+  isMobile?: boolean;
 }
 
 const MenuIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -39,7 +41,7 @@ const ChevronDownIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg className={className} stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><polyline points="6,9 12,15 18,9"></polyline></svg>
 );
 
-export const Header: React.FC<HeaderProps> = ({ user, onToggleSidebar, onToggleAdminSidebar, onLogout, selectedClass, onClassSelect, onProfile }) => {
+export const Header: React.FC<HeaderProps> = ({ user, onToggleSidebar, onToggleAdminSidebar, onLogout, selectedClass, onClassSelect, onProfile, onBack, isMobile }) => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -58,6 +60,39 @@ export const Header: React.FC<HeaderProps> = ({ user, onToggleSidebar, onToggleA
   const [selectedSubUnitId, setSelectedSubUnitId] = useState<string | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Alternating Title State
+  const titles = ['Tamil Vizuthukal', 'தமிழ் விழுதுகள்'];
+  const [titleIndex, setTitleIndex] = useState(0);
+  const [animState, setAnimState] = useState<'visible' | 'out' | 'in-start'>('visible');
+
+  useEffect(() => {
+    const cycleTime = 4000;
+    const interval = setInterval(() => {
+      setAnimState('out');
+      setTimeout(() => {
+        setTitleIndex((prev) => (prev + 1) % titles.length);
+        setAnimState('in-start');
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setAnimState('visible');
+          });
+        });
+      }, 500);
+    }, cycleTime);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getTransformClass = () => {
+    switch (animState) {
+      case 'visible': return 'translate-y-0 opacity-100 transition-all duration-500 ease-out';
+      case 'out': return '-translate-y-8 opacity-0 transition-all duration-500 ease-in';
+      case 'in-start': return 'translate-y-8 opacity-0 transition-none duration-0';
+      default: return 'translate-y-0 opacity-100';
+    }
+  };
+
+  const isTamilTitle = titles[titleIndex] === 'தமிழ் விழுதுகள்';
 
   // Update current class when selectedClass prop changes
   useEffect(() => {
@@ -117,6 +152,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onToggleSidebar, onToggleA
   return (
     <header className="flex items-center justify-between px-2 sm:px-4 h-16 bg-white dark:bg-black border-b border-gray-200 dark:border-gray-700 z-50 shrink-0">
       <div className="flex items-center space-x-2 sm:space-x-4">
+        {isMobile && onBack && <button onClick={onBack} className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Back"><span aria-hidden="true">←</span></button>}
         <button
           onClick={onToggleSidebar}
           className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -129,9 +165,16 @@ export const Header: React.FC<HeaderProps> = ({ user, onToggleSidebar, onToggleA
 
         {/* Hide title text in fullscreen */}
         {!isFullScreen && (
-          <div className="flex items-center space-x-3">
-            <h1 className="text-sm sm:text-xl font-bold text-gray-800 dark:text-white truncate max-w-40 sm:max-w-none">
-              Learning Platform
+          <div className="flex items-center space-x-3 overflow-hidden h-10">
+            <h1
+              className={`text-sm sm:text-xl font-bold truncate block bg-clip-text text-transparent pl-1 transform
+                bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400
+                ${isTamilTitle ? 'font-tau-marutham-bold' : 'font-sans'}
+                ${getTransformClass()}
+                max-w-40 sm:max-w-none
+              `}
+            >
+              {titles[titleIndex]}
             </h1>
           </div>
         )}

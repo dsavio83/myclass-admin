@@ -12,6 +12,7 @@ export interface User {
   role: UserRole;
   status: 'active' | 'inactive';
   mobileNumber?: string;
+  class?: string;
   isFirstLogin: boolean;
   canEdit?: boolean; // New property for granular edit permissions
   requestRole?: string | null;

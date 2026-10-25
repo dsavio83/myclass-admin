@@ -194,6 +194,7 @@ export const AdminView: React.FC = () => {
                                 <BelowAveragePage
                                     lessonId={state.lessonId}
                                     user={user}
+                                    readOnly={true}
                                 />
                             ) : (
                                 <ContentDisplay
@@ -225,7 +226,6 @@ export const AdminView: React.FC = () => {
                             <BelowAveragePage
                                 lessonId={state.lessonId}
                                 user={user}
-                                readOnly={true}
                             />
                         </div>
                     </div>
@@ -262,7 +262,7 @@ export const AdminView: React.FC = () => {
             />
             <SelectionRestorationIndicator />
             <div className="flex flex-1 overflow-hidden">
-                {(state.activePage === 'browser' || state.activePage === 'below-average') && (
+                {state.activePage === 'browser' && (
                     <Sidebar
                         lessonId={state.lessonId}
                         selectedResourceType={state.selectedResourceType}

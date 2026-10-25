@@ -4,8 +4,15 @@ echo ==========================================
 echo Starting MyClass Project (Frontend + API)
 echo ==========================================
 
-:: Ensure MongoDB service is running
-echo Checking MongoDB service...
+:: Check if using MongoDB Atlas cloud database
+findstr /i "mongodb+srv" api\.env >nul 2>&1
+if %errorlevel% equ 0 (
+    echo Using MongoDB Atlas Cloud Database.
+    goto :db_ready
+)
+
+:: Ensure local MongoDB service is running
+echo Checking local MongoDB service...
 sc query MongoDB >nul 2>&1
 if %errorlevel% neq 0 goto :no_db_service
 
@@ -19,7 +26,7 @@ echo MongoDB service started.
 goto :db_ready
 
 :no_db_service
-echo MongoDB service not found. Please install or start MongoDB and try again.
+echo Local MongoDB service not found. If using cloud database, ensure MONGODB_URI is set in api\.env.
 pause
 exit /b 1
 

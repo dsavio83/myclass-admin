@@ -52,3 +52,10 @@ export const SlideIcon: React.FC<{ className?: string }> = ({ className }) => (
     <path d="M8 18l-2 3h12l-2-3"></path>
   </svg>
 );
+
+export const DPlusIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+    <rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="currentColor" fillOpacity="0.12" stroke="currentColor" strokeWidth="1.5" />
+    <text x="12" y="15.1" textAnchor="middle" fill="currentColor" fontFamily="Arial, sans-serif" fontSize="9" fontWeight="800">D+</text>
+  </svg>
+);

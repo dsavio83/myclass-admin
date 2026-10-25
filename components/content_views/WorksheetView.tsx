@@ -337,36 +337,86 @@ export const WorksheetView: React.FC<WorksheetViewProps> = ({ lessonId, user, ca
         }
     };
 
-    const executeDownloadRequest = async (id: string, title: string) => {
+    const executeDownloadRequest = async (id: string, title: string, itemLessonName?: string) => {
         setDownloading(true);
         setSweetAlert({
             show: true,
             type: 'loading',
             title: 'பதிவிறக்கம் | Downloading',
-            message: 'PDF அனுப்பப்படுகிறது... தயவுசெய்து காத்திருக்கவும்\n\nSending PDF... Please wait'
+            message: 'கோப்பு பதிவிறக்கப்படுகிறது... தயவுசெய்து காத்திருக்கவும்\n\nDownloading file... Please wait'
         });
 
         try {
-            const response = await api.downloadContent(id, user._id, user.email);
-            if (response.success) {
-                if (response.isAdmin && response.fileUrl) {
+            // Determine chapter name
+            let chapterName = itemLessonName;
+            if (!chapterName && lessonId) {
+                try {
+                    const hierarchy = await api.getHierarchy(lessonId);
+                    if (hierarchy?.lessonName) {
+                        chapterName = hierarchy.lessonName;
+                    }
+                } catch (_) {}
+            }
+
+            const response = await api.downloadContent(id, user?._id || '', user?.email || '');
+            if (response.success && response.fileUrl) {
+                const downloadUrl = response.fileUrl;
+
+                if (!chapterName && (response as any).chapterName) {
+                    chapterName = (response as any).chapterName;
+                }
+
+                // Clean chapter name for safe filename (preserves Tamil and English letters)
+                const safeName = (chapterName || title || 'Worksheet')
+                    .replace(/[/\\?%*:|"<>]/g, '_')
+                    .trim();
+
+                const fileName = safeName.toLowerCase().endsWith('.pdf') ? safeName : `${safeName}.pdf`;
+
+                try {
+                    const res = await fetch(downloadUrl);
+                    const blob = await res.blob();
+                    const blobUrl = URL.createObjectURL(blob);
                     const link = document.createElement('a');
-                    link.href = response.fileUrl;
-                    link.download = title || 'worksheet.pdf';
+                    link.href = blobUrl;
+                    link.download = fileName;
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
-                    setSweetAlert({ show: true, type: 'success', title: 'வெற்றி! | Success!', message: 'கோப்பு பதிவிறக்கம் தொடங்கியது!\n\nDownload started!' });
-                } else if (response.emailSent) {
-                    setSweetAlert({ show: true, type: 'success', title: 'வெற்றி! | Success!', message: `உங்கள் மின்னஞ்சலுக்கு PDF அனுப்பப்பட்டது!\n📧 ${user.email}\n\nPDF sent to your email successfully!` });
+                    URL.revokeObjectURL(blobUrl);
+                } catch {
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.download = fileName;
+                    link.target = '_blank';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
                 }
+
+                setSweetAlert({
+                    show: true,
+                    type: 'success',
+                    title: 'வெற்றி! | Success!',
+                    message: `${fileName} பதிவிறக்கம் தொடங்கியது!\n\nDownload started!`
+                });
                 setVersion(v => v + 1);
-                setTimeout(() => setSweetAlert(prev => ({ ...prev, show: false })), 3000);
+                setTimeout(() => setSweetAlert(prev => ({ ...prev, show: false })), 2500);
             } else {
-                setSweetAlert({ show: true, type: 'error', title: 'தோல்வி | Failed', message: `${response.message}\n\nContact Admin:\n📞 ${response.adminPhone || '7904838296'}` });
+                setSweetAlert({
+                    show: true,
+                    type: 'error',
+                    title: 'தோல்வி | Failed',
+                    message: `${response.message || 'Download failed'}\n\nContact Admin:\n📞 ${response.adminPhone || '7904838296'}`
+                });
             }
         } catch (error: any) {
-            setSweetAlert({ show: true, type: 'error', title: 'பிழை | Error', message: `Download failed. Contact Admin:\n📞 7904838296` });
+            setSweetAlert({
+                show: true,
+                type: 'error',
+                title: 'பிழை | Error',
+                message: `Download failed: ${error.message || ''}\n\nContact Admin:\n📞 7904838296`
+            });
         } finally {
             setDownloading(false);
         }
@@ -438,7 +488,7 @@ export const WorksheetView: React.FC<WorksheetViewProps> = ({ lessonId, user, ca
                                     isAdmin={canEdit}
                                     onRemove={() => handleDelete(item._id)}
                                     onExpand={(url) => handleView(url, item._id)}
-                                    onDownloadClick={() => executeDownloadRequest(item._id, item.title)}
+                                    onDownloadClick={() => executeDownloadRequest(item._id, item.title, item.metadata?.lessonName)}
                                     downloading={downloading}
                                     onTogglePublish={handleTogglePublish}
                                 />

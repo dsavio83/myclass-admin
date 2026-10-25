@@ -1,4 +1,4 @@
-// api/index.js - Trigger restart 17
+// api/index.js - Trigger restart 18
 import 'dotenv/config';
 import express from 'express';
 import mongoose from 'mongoose';
@@ -115,7 +115,7 @@ export const startServer = async () => {
     try {
         await connectToDatabase();
         const PORT = process.env.PORT || 5002;
-        const server = app.listen(PORT, () => {
+        const server = app.listen(PORT, '0.0.0.0', () => {
             console.log(`✓ API Server running on port ${PORT}`);
             console.log(`✓ Health check available at http://localhost:${PORT}/health`);
             console.log(`✓ API endpoints available at http://localhost:${PORT}/api`);

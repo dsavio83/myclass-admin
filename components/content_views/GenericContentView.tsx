@@ -898,36 +898,41 @@ export const GenericContentView: React.FC<GenericContentViewProps> = ({ lessonId
             message: 'தயவுசெய்து காத்திருக்கவும்...\n\nPlease wait...'
         });
 
-        const isAdminUser = user.role === 'admin' || !!user.canEdit;
-
         try {
-            const res = await api.downloadContent(contentId, user._id, user.email);
+            const res = await api.downloadContent(contentId, user?._id || '', user?.email || '');
 
-            if (res.success) {
-                if (isAdminUser && res.fileUrl) {
-                    // Admin: Direct Download
+            if (res.success && res.fileUrl) {
+                const downloadUrl = res.fileUrl;
+                const fileName = (res.title || 'document').replace(/\.pdf$/i, '') + '.pdf';
+
+                try {
+                    const r = await fetch(downloadUrl);
+                    const blob = await r.blob();
+                    const blobUrl = URL.createObjectURL(blob);
                     const link = document.createElement('a');
-                    link.href = res.fileUrl;
-                    link.setAttribute('download', '');
+                    link.href = blobUrl;
+                    link.download = fileName;
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
-
-                    setSweetAlert({
-                        show: true,
-                        type: 'success',
-                        title: 'வெற்றி! | Success!',
-                        message: 'கோப்பு பதிவிறக்கம் தொடங்கியது!\n\nDownload started successfully!'
-                    });
-                } else {
-                    // User: Email Sent
-                    setSweetAlert({
-                        show: true,
-                        type: 'success',
-                        title: 'வெற்றி! | Success!',
-                        message: `PDF உங்கள் மின்னஞ்சலுக்கு அனுப்பப்பட்டது!\n📧 ${user.email}\n\nPDF sent to your email successfully!`
-                    });
+                    URL.revokeObjectURL(blobUrl);
+                } catch {
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.download = fileName;
+                    link.target = '_blank';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
                 }
+
+                setSweetAlert({
+                    show: true,
+                    type: 'success',
+                    title: 'வெற்றி! | Success!',
+                    message: 'கோப்பு பதிவிறக்கம் தொடங்கியது!\n\nDownload started successfully!'
+                });
+                setTimeout(() => setSweetAlert(prev => ({ ...prev, show: false })), 2500);
             } else {
                 throw new Error(res.message || 'Download failed');
             }

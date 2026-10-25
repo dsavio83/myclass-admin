@@ -4,7 +4,11 @@ echo Stopping MyClass Project
 echo ==========================================
 
 echo.
-echo [1/2] Stopping Frontend (Port 5173)...
+echo [1/2] Stopping Frontend (Port 3001 / 5173)...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3001 ^| findstr LISTENING') do (
+    echo Killing PID: %%a
+    taskkill /F /PID %%a 2>nul
+)
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5173 ^| findstr LISTENING') do (
     echo Killing PID: %%a
     taskkill /F /PID %%a 2>nul

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useApi } from '../hooks/useApi';
 import { getClasses, getSubjectsByClassId, getUnitsBySubjectId, getSubUnitsByUnitId, getLessonsBySubUnitId } from '../services/api';
 import { Class, Subject, Unit, SubUnit, Lesson } from '../types';
@@ -17,6 +18,7 @@ interface CascadeSelectorsProps {
   onLessonChange: (id: string | null) => void;
   onModalToggle?: (isOpen: boolean) => void;
   onlyPublished?: boolean;
+  portalModal?: boolean;
 }
 
 export const CascadeSelectors: React.FC<CascadeSelectorsProps> = ({
@@ -31,7 +33,8 @@ export const CascadeSelectors: React.FC<CascadeSelectorsProps> = ({
   onSubUnitChange,
   onLessonChange,
   onModalToggle,
-  onlyPublished = false
+  onlyPublished = false,
+  portalModal = false
 }) => {
   const { data: classes, isLoading: isLoadingClasses } = useApi<Class[]>(() => getClasses(onlyPublished), [onlyPublished]);
   const { data: subjects, isLoading: isLoadingSubjects } = useApi<Subject[]>(
@@ -170,6 +173,26 @@ export const CascadeSelectors: React.FC<CascadeSelectorsProps> = ({
     onModalToggle?.(false);
   };
 
+  const selectionModal = (
+    <SelectionModal
+      isOpen={isModalOpen}
+      onClose={handleModalClose}
+      classId={classId}
+      subjectId={subjectId}
+      unitId={unitId}
+      subUnitId={subUnitId}
+      lessonId={lessonId}
+      onClassChange={onClassChange}
+      onSubjectChange={onSubjectChange}
+      onUnitChange={onUnitChange}
+      onSubUnitChange={onSubUnitChange}
+      onLessonChange={onLessonChange}
+      onSave={handleSave}
+      defaultClass="8"
+      onlyPublished={onlyPublished}
+    />
+  );
+
   return (
     <>
       {/* Hidden on mobile - selections are handled through modal */}
@@ -253,24 +276,9 @@ export const CascadeSelectors: React.FC<CascadeSelectorsProps> = ({
         </button>
       </div>
 
-      {/* Selection Modal */}
-      <SelectionModal
-        isOpen={isModalOpen}
-        onClose={handleModalClose}
-        classId={classId}
-        subjectId={subjectId}
-        unitId={unitId}
-        subUnitId={subUnitId}
-        lessonId={lessonId}
-        onClassChange={onClassChange}
-        onSubjectChange={onSubjectChange}
-        onUnitChange={onUnitChange}
-        onSubUnitChange={onSubUnitChange}
-        onLessonChange={onLessonChange}
-        onSave={handleSave}
-        defaultClass="8"
-        onlyPublished={onlyPublished}
-      />
+      {portalModal && typeof document !== 'undefined'
+        ? createPortal(selectionModal, document.body)
+        : selectionModal}
     </>
   );
 };

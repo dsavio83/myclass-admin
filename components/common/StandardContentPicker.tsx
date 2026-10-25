@@ -12,6 +12,39 @@ interface StandardContentPickerProps {
     resourceType: ResourceType;
 }
 
+const getPlainTextPreview = (content?: string): string => {
+    if (!content) return '';
+
+    if (typeof DOMParser === 'undefined') {
+        return content
+            .replace(/<\/(p|div|li|h[1-6]|br|tr)>/gi, ' ')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/&nbsp;|&#160;/gi, ' ')
+            .replace(/&amp;/gi, '&')
+            .replace(/&lt;/gi, '<')
+            .replace(/&gt;/gi, '>')
+            .replace(/&quot;/gi, '"')
+            .replace(/&#39;|&apos;/gi, "'")
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    // Parse rich-text HTML as inert markup, then show only its readable text.
+    // A second pass handles content that was HTML-escaped before it was stored.
+    let text = content;
+    for (let pass = 0; pass < 2; pass += 1) {
+        const parsed = new DOMParser().parseFromString(text, 'text/html');
+        parsed.querySelectorAll('script, style, noscript').forEach(node => node.remove());
+        const plainText = parsed.body.textContent || '';
+        if (!/<\/?[a-z][^>]*>/i.test(plainText)) {
+            return plainText.replace(/\s+/g, ' ').trim();
+        }
+        text = plainText;
+    }
+
+    return text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+};
+
 export const StandardContentPicker: React.FC<StandardContentPickerProps> = ({
     isOpen,
     onClose,
@@ -112,8 +145,8 @@ export const StandardContentPicker: React.FC<StandardContentPickerProps> = ({
                                             <h3 className="font-semibold text-gray-800 dark:text-gray-200 truncate">
                                                 {item.title || '(Untitled)'}
                                             </h3>
-                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
-                                                {item.body ? item.body.substring(0, 100) : (item.originalFileName || 'No description')}
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 break-words">
+                                                {getPlainTextPreview(item.body) || item.originalFileName || 'No description'}
                                             </p>
                                         </div>
                                     </div>

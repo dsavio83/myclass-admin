@@ -1143,6 +1143,12 @@ router.get('/content/:id/file', async (req, res) => {
             return res.status(404).json({ message: 'Content not found in database', contentId: req.params.id });
         }
 
+        // Check if stored in Cloudinary
+        if (content.file && content.file.url) {
+            console.log('[API /content/:id/file] Redirecting to Cloudinary URL from content.file.url');
+            return res.redirect(content.file.url);
+        }
+
         if (!content.filePath) {
             console.log('[API /content/:id/file] No filePath in content:', {
                 contentId: req.params.id,
@@ -2573,7 +2579,7 @@ router.post('/content/:id/download', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Content not found' });
         }
 
-        // 2. Find user (by email or userId from request)
+        // 2. Find user (optional)
         let user = null;
         if (requestUserId) {
             user = await User.findById(requestUserId);
@@ -2581,16 +2587,7 @@ router.post('/content/:id/download', async (req, res) => {
             user = await User.findOne({ email });
         }
 
-        if (!user && !email) {
-            return res.status(400).json({
-                success: false,
-                message: 'User information required for download',
-                adminPhone: ADMIN_PHONE
-            });
-        }
-
-        const isAdmin = user?.role === 'admin';
-        const userEmail = user?.email || email;
+        const userEmail = user?.email || email || 'direct-download@local';
 
         // 3. Get hierarchy information
         let hierarchyData = {
@@ -2636,147 +2633,53 @@ router.post('/content/:id/download', async (req, res) => {
         }
 
         // 5. Create DownloadLog entry
-        const downloadLog = await DownloadLog.create({
-            userId: user?._id,
-            userEmail: userEmail,
-            userName: user?.name || 'Guest',
-            contentId: content._id,
-            contentTitle: content.title,
-            contentType: content.type,
-            lessonId: content.lessonId,
-            classId: hierarchyData.classId,
-            className: hierarchyData.className,
-            subjectId: hierarchyData.subjectId,
-            subjectName: hierarchyData.subjectName,
-            unitName: hierarchyData.unitName,
-            subUnitName: hierarchyData.subUnitName,
-            lessonName: hierarchyData.lessonName,
-            downloadStatus: 'success', // Will update to 'failed' if email fails
-            emailSent: false,
-            ipAddress: ipAddress
-        });
+        try {
+            await DownloadLog.create({
+                userId: user?._id,
+                userEmail: userEmail,
+                userName: user?.name || 'Guest',
+                contentId: content._id,
+                contentTitle: content.title,
+                contentType: content.type,
+                lessonId: content.lessonId,
+                classId: hierarchyData.classId,
+                className: hierarchyData.className,
+                subjectId: hierarchyData.subjectId,
+                subjectName: hierarchyData.subjectName,
+                unitName: hierarchyData.unitName,
+                subUnitName: hierarchyData.subUnitName,
+                lessonName: hierarchyData.lessonName,
+                downloadStatus: 'success',
+                emailSent: false,
+                ipAddress: ipAddress
+            });
+        } catch (logErr) {
+            console.error('Download log error:', logErr);
+        }
 
         // 6. Increment download counters
-        await Content.updateOne({ _id: contentId }, { $inc: { downloadCount: 1 } });
-
-        // Also increment lesson-level download count if applicable
-        if (content.lessonId && content.type) {
-            const downloadCountField = `${content.type}DownloadCount`;
-            await Lesson.updateOne(
-                { _id: content.lessonId },
-                { $inc: { [downloadCountField]: 1 } }
-            );
-        }
-
-        // 7. FOR ADMIN: Allow direct download
-        if (isAdmin) {
-            await DownloadLog.findByIdAndUpdate(downloadLog._id, {
-                emailSent: false,
-                downloadStatus: 'success'
-            });
-
-            return res.json({
-                success: true,
-                fileUrl: fileUrl,
-                emailSent: false,
-                isAdmin: true,
-                message: 'Admin download initiated'
-            });
-        }
-
-        // 8. FOR NON-ADMIN: Email ONLY (No direct download)
-        if (!userEmail) {
-            await DownloadLog.findByIdAndUpdate(downloadLog._id, {
-                downloadStatus: 'failed',
-                errorMessage: 'No email provided'
-            });
-
-            return res.status(400).json({
-                success: false,
-                message: 'Email required for download. Please update your profile.',
-                adminPhone: ADMIN_PHONE
-            });
-        }
-
-        // 9. Send email using Gmail SMTP (fallback from Brevo)
         try {
-            const emailUser = process.env.EMAIL_USER;
-            const emailPass = process.env.EMAIL_PASS;
-
-            if (!emailUser || !emailPass) {
-                throw new Error('Email credentials not configured');
+            await Content.updateOne({ _id: contentId }, { $inc: { downloadCount: 1 } });
+            if (content.lessonId && content.type) {
+                const downloadCountField = `${content.type}DownloadCount`;
+                await Lesson.updateOne(
+                    { _id: content.lessonId },
+                    { $inc: { [downloadCountField]: 1 } }
+                );
             }
-
-            // Create Gmail transporter
-            const transporter = nodemailer.createTransport({
-                service: 'gmail',
-                auth: {
-                    user: emailUser,
-                    pass: emailPass
-                }
-            });
-
-            // Prepare email attachments
-            let attachments = [];
-            if (fileUrl && fileUrl.startsWith('http')) {
-                attachments.push({
-                    filename: `${content.title}.pdf`,
-                    path: fileUrl
-                });
-            }
-
-            // Send email
-            await transporter.sendMail({
-                from: `"Tamil Vizhuthugal" <${emailUser}>`,
-                to: userEmail,
-                subject: `Tamil Vizhuthugal - ${content.title}`,
-                html: `
-                    <div style="font-family: 'Tamil MN', 'Noto Sans Tamil', Arial, sans-serif; padding: 20px; max-width: 600px;">
-                        <h2 style="color: #2563eb;">வணக்கம் ${user?.name || ''}!</h2>
-                        <p style="font-size: 16px;">நீங்கள் கேட்ட உள்ளடக்கம் இணைக்கப்பட்டுள்ளது:</p>
-                        <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                            <h3 style="margin: 0 0 10px 0; color: #1f2937;">${content.title}</h3>
-                            <p style="margin: 5px 0; color: #6b7280;">வகுப்பு: ${hierarchyData.className}</p>
-                            <p style="margin: 5px 0; color: #6b7280;">பாடம்: ${hierarchyData.subjectName}</p>
-                            ${hierarchyData.unitName ? `<p style="margin: 5px 0; color: #6b7280;">அலகு: ${hierarchyData.unitName}</p>` : ''}
-                            ${hierarchyData.lessonName ? `<p style="margin: 5px 0; color: #6b7280;">பாடம்: ${hierarchyData.lessonName}</p>` : ''}
-                        </div>
-                        <p style="color: #6b7280; font-size: 14px;">Tamil Vizhuthugal-ஐ பயன்படுத்தியதற்கு நன்றி!</p>
-                    </div>
-                `,
-                attachments: attachments
-            });
-
-            // Update log as success
-            await DownloadLog.findByIdAndUpdate(downloadLog._id, {
-                emailSent: true,
-                downloadStatus: 'success'
-            });
-
-            return res.json({
-                success: true,
-                emailSent: true,
-                message: `PDF sent to ${userEmail} successfully`,
-                fileUrl: null // Don't send file URL to non-admin
-            });
-
-        } catch (emailError) {
-            console.error('[Download] Email failed:', emailError);
-
-            // Update log as failed
-            await DownloadLog.findByIdAndUpdate(downloadLog._id, {
-                downloadStatus: 'failed',
-                emailSent: false,
-                errorMessage: emailError.message
-            });
-
-            return res.status(500).json({
-                success: false,
-                message: 'Email sending failed. Please contact admin.',
-                adminPhone: ADMIN_PHONE,
-                error: emailError.message
-            });
+        } catch (cntErr) {
+            console.error('Download counter error:', cntErr);
         }
+
+        // 7. Direct download for EVERYONE (no email required)
+        return res.json({
+            success: true,
+            fileUrl: fileUrl,
+            title: content.title,
+            chapterName: hierarchyData.lessonName || content.metadata?.lessonName || '',
+            emailSent: false,
+            message: 'Download initiated successfully'
+        });
 
     } catch (error) {
         console.error('[Download] Critical Error:', error);

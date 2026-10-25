@@ -26,8 +26,54 @@
   font-style: normal;
 }
 
+@font-face {
+  font-family: 'TAU-Marutham-Bold';
+  src: url('/fonts/TAU-Marutham Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TAU-Marutham';
+  src: url('/fonts/TAU-Marutham Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TAU-Maduram-Bold';
+  src: url('/fonts/TAU-Marutham Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
 .font-tau-marutham {
   font-family: 'TAU-Marutham', 'Noto Sans Tamil', sans-serif !important;
+}
+
+.font-tau-marutham-bold,
+.font-tau-maduram-bold,
+.font-tamil-vizuthukal {
+  font-family: 'TAU-Marutham-Bold', 'TAU-Maduram-Bold', 'TAU-Marutham', 'Noto Sans Tamil', sans-serif !important;
+  font-weight: bold !important;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 20%, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out;
 }
 
 /* Floating Animation for Educational Elements */
@@ -313,12 +359,54 @@
   }
 }
 
+/* Keep native controls and browser scrollbars aligned with the app theme. */
+:root {
+  color-scheme: light;
+  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-width: thin;
+}
+
+:root.dark {
+  color-scheme: dark;
+  scrollbar-color: #475569 transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
 /* Dark mode improvements */
 @media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-  }
-
   .enhanced-button:hover {
     box-shadow: 0 10px 25px rgba(96, 165, 250, 0.4);
   }
