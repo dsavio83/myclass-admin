@@ -88,7 +88,7 @@ app.get('/health', (req, res) => {
 
 // Root endpoint & SPA fallback
 if (fs.existsSync(distPath)) {
-    app.get('*', (req, res, next) => {
+    app.get('/{*splat}', (req, res, next) => {
         if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/health')) {
             return next();
         }
@@ -122,10 +122,6 @@ export const startServer = async () => {
             : app.listen(port, () => {
                 console.log(`✓ Production Server listening on socket: ${port}`);
             });
-
-        server.on('error', (err) => {
-            console.error('Server HTTP listen error:', err && (err.message || err));
-        });
 
         // Increase timeout to 5 minutes for large uploads
         server.setTimeout(5 * 60 * 1000);
